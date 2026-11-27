@@ -1,0 +1,31 @@
+[project]
+name = "axiomweave"
+version = "0.1.0.dev0"
+description = "A Python-based formal mathematical proof language"
+readme = "README.md"
+authors = [
+    { name = "Doosik Kim", email = "doosik71@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14.0"]
+build-backend = "uv_build"
+
+[project.scripts]
+axw = "axiomweave.cli:main"
+
+[project.optional-dependencies]
+symbolic = ["sympy"]
+smt = ["z3-solver"]
+
+[dependency-groups]
+dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "mypy"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
