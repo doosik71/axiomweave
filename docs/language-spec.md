@@ -193,11 +193,11 @@ def _(ctx):
 report = thy.check(allowed_axioms=None)
 ```
 
-- `check()`는 가져온 Theory를 먼저 검증한 뒤(이미 검증된 Theory는 다시 검증하지 않을 수 있다), 이 Theory의 정리들을 선언 순서대로 처리한다.
+- `check()`는 가져온 Theory를 먼저 검증한 뒤(이미 검증된 Theory는 다시 검증하지 않을 수 있다), 이 Theory의 정리들을 선언 순서대로 처리한다. v0.1 구현은 가져온 Theory의 정리까지 환경 전체를 매번 하나의 번들로 다시 검증하며, 그 정리들의 상태도 갱신한다.
 - 각 정리에 대해 증명 함수를 실행하여 증명 객체를 만든다(Elaboration, [7](#7-elaboration)). 그런 다음 공리와 Elaboration에 성공한 정리들로 인증서 번들([kernel-spec.md §6](kernel-spec.md#6-인증서-번들))을 구성하고, 그 직렬화 바이트를 커널 진입점 `check_bundle`에 전달한다 ([kernel-spec.md §8.1](kernel-spec.md#81-진입점)). 번들의 선언 해시와 `axioms` 필드는 Elaborator가 채우며, 커널이 다시 계산하여 확인한다.
 - `allowed_axioms`는 허용 공리 정규 이름의 집합이다. `None`이면 표준 허용 목록 `STANDARD_AXIOMS = {"classical.em"}`을 사용한다 ([logic-spec.md §8.3](logic-spec.md#83-공리-허용-정책), [§9](logic-spec.md#9-고전-원리)). Elaborator는 이 이름 집합을 이름→선언 해시 사상으로 바꾸어 커널에 명시적으로 전달해야 한다. 표준 이름은 커널에 내장된 표준 해시로, 그 밖의 이름은 이 Theory에 선언된 공리의 해시로 대응시킨다 ([kernel-spec.md §9](kernel-spec.md#9-허용-공리-정책)).
-- 환경에 허용되지 않은 공리가 있으면 환경 전체를 거부해야 한다. 이때 어떤 정리도 커널 검사를 받지 않으며 모든 정리는 `REJECTED`가 된다.
-- `check()`는 예외를 일으키지 않고 `CheckReport`를 반환한다. 단, 잘못된 `allowed_axioms` 인자 같은 API 오용은 예외를 일으킬 수 있다.
+- 환경에 허용되지 않은 공리가 있으면 환경 전체를 거부해야 한다. 이때 어떤 정리도 커널 검사를 받지 않으며, Elaboration에 성공한 모든 정리는 `REJECTED`(진단 단계 `environment`)가 된다. 증명이 없거나 Elaboration 단계에서 멈춘 정리는 [5.7](#57-검증-상태-전이)의 상태를 유지한다.
+- `check()`는 예외를 일으키지 않고 `CheckReport`를 반환한다. 단, API 오용은 예외를 일으킨다. `allowed_axioms`에 문자열 하나를 넘기면 `AxwTypeError`, 표준 목록에도 환경에도 없는 공리 이름을 넘기면 `DeclarationError`가 발생한다.
 - `check()`는 매번 전체 Theory를 다시 처리한다. v0.1은 검증 결과 캐싱을 요구하지 않는다.
 - v0.1의 `check()`는 커널을 같은 프로세스에서 실행할 수 있다. 별도 프로세스의 독립 재검증은 인증서와 `axw verify`로 수행한다 ([8](#8-인증서와-명령행)).
 
@@ -206,7 +206,7 @@ report = thy.check(allowed_axioms=None)
 | 속성/메서드     | 의미                                                    |
 | --------------- | ------------------------------------------------------- |
 | `ok`            | 모든 정리가 `VERIFIED`이면 `True`                       |
-| `results`       | 정리별 상태, 진단 목록, 의존 공리 (선언 순서)           |
+| `results`       | 정리별 상태, 진단 목록, 의존 공리 (가져온 Theory의 정리를 포함한 환경 순서) |
 | `__str__`       | 사람이 읽을 수 있는 요약                                |
 
 ### 5.7. 검증 상태 전이
@@ -345,8 +345,8 @@ Elaboration은 증명 함수의 실행 기록을 [logic-spec.md §8](logic-spec.
 
 ## 8. 인증서와 명령행
 
-- `thy.export(path)`는 이 Theory의 자기완결 인증서 번들을 `path`에 기록해야 한다. 번들은 가져온 Theory의 선언과 이 Theory의 공리 및 `VERIFIED` 정리를 포함한다. 인증서 형식은 [kernel-spec.md §6](kernel-spec.md#6-인증서-번들)에서 정의한다.
-- `axw check <file.py>`는 파일을 모듈로 가져와 모듈 최상위의 `Theory` 객체를 모두 찾아 `check()`를 수행하고, 모든 정리가 `VERIFIED`일 때만 종료 코드 0을 반환해야 한다.
+- `thy.export(path)`는 이 Theory의 자기완결 인증서 번들을 `path`에 기록해야 한다. 번들은 가져온 Theory의 선언과 이 Theory의 공리 및 `VERIFIED` 정리를 포함한다. 인증서 형식은 [kernel-spec.md §6](kernel-spec.md#6-인증서-번들)에서 정의한다. 번들은 마지막 `check()`의 결과로 만들며, `check()`를 호출하기 전에 `export()`를 호출하면 `AxwError`가 발생한다.
+- `axw check <file.py>`는 파일을 모듈로 가져와 모듈 최상위의 `Theory` 객체를 모두 찾아 `check()`를 수행하고, 모든 정리가 `VERIFIED`일 때만 종료 코드 0을 반환해야 한다. 다른 최상위 Theory가 가져온 Theory(예: `classical`)는 그 Theory의 검증에 포함되므로 따로 검사하지 않는다.
 - `axw verify <file.axwp>`는 Python 증명 코드를 실행하지 않고 인증서만으로 커널 검증을 수행한다. 상세 동작은 [kernel-spec.md](kernel-spec.md)에서 정의한다.
 
 ## 9. 예외와 진단

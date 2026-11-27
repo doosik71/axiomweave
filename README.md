@@ -5,12 +5,12 @@
 > 공리를 엮어 수학적 진리를 구성하다.  
 > Weaving Axioms into Mathematical Truth.
 
-![Status](https://img.shields.io/badge/status-design-lightgrey)
+![Status](https://img.shields.io/badge/status-pre--alpha-orange)
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Package manager](https://img.shields.io/badge/package%20manager-uv-purple)
 ![Version](https://img.shields.io/badge/target-v0.1.0-lightgrey)
 
-> **개발 상태:** 설계 및 초기 구현 계획 단계(Pre-alpha). 이 문서의 AxiomWeave API, CLI, 파일 구조 및 로드맵은 목표 명세이며, 현재 구현 또는 배포 완료를 의미하지 않는다. `uv` 관련 명령은 개발 환경 구성에 사용할 수 있다.
+> **개발 상태:** Pre-alpha. 직관주의 명제 논리(L0)의 검증 커널(AxiomCore), Python DSL(`Theory`, 증명 전술), 표준 `classical` Theory, `axw check`/`axw verify` CLI가 구현되어 있다. 그 밖의 API, CLI 명령, 파일 구조 및 로드맵 항목은 목표 명세이며 구현 또는 배포 완료를 의미하지 않는다.
 
 ## 1. Overview
 
@@ -88,7 +88,7 @@ flowchart TD
 
 ## 4. Language Examples
 
-> 다음 코드는 **설계 예정 API**의 사용 예시이다. 현재 설치하여 실행할 수 있는 구현을 보장하지 않는다. v0.1(L0) API의 규범적 정의는 [docs/language-spec.md](docs/language-spec.md)를 따른다.
+> 4.1의 명제 논리 예제는 현재 구현(v0.1, L0)으로 실행할 수 있다. 4.2와 4.3은 L1 이후의 **설계 예정 API** 예시이다. v0.1 API의 규범적 정의는 [docs/language-spec.md](docs/language-spec.md)를 따른다.
 
 ### 4.1. Propositional Logic
 
@@ -368,20 +368,28 @@ Candidate proof -> Kernel check -> Verified theorem OR rejection
 
 SymPy는 기호 연산, SMT 솔버는 추론 후보 및 인증서 생성, Lean은 지원되는 논리 범위의 교차 검증에 활용한다. 외부 도구의 성공 응답만으로 자체 정리를 승인하지 않는다. 인증서를 내부 증명 객체로 재구성하여 커널에서 검증할 수 있는 경우에만 `VERIFIED` 상태를 부여한다.
 
-## 8. Command-Line Interface (Planned)
+## 8. Command-Line Interface
 
-다음 명령은 구현 예정인 CLI 인터페이스이다.
+다음 명령은 v0.1에 구현되어 있다.
 
 ```bash
 uv run axw --help
-uv run axw check examples/logic/implication.py
+uv run axw check examples/logic/implication.py   # 증명 코드를 실행하고 커널로 검증
+uv run axw verify proof.axwp                     # 사용자 코드 없이 인증서만 커널로 재검증
+uv run axw verify proof.axwp --allow NAME=HASH   # 표준 외 공리를 해시와 함께 허용
+```
+
+인증서(`.axwp`)는 `thy.check()` 후 `thy.export(path)`로 만든다. 형식은 [docs/kernel-spec.md](docs/kernel-spec.md)를 따른다.
+
+다음 명령은 구현 예정이다.
+
+```bash
 uv run axw prove examples/logic/implication.py
-uv run axw verify proof.axwp
 uv run axw axioms examples/logic/implication.py
 uv run axw search "implication transitivity"
 ```
 
-`.axwp`는 향후 정의할 증명 인증서 파일 형식이며, `.axw`는 향후 독립 DSL의 소스 파일 확장자이다.
+`.axw`는 향후 독립 DSL의 소스 파일 확장자이다.
 
 ## 9. AI-driven Theorem Proving
 
@@ -401,7 +409,7 @@ flowchart LR
 
 ## 10. Testing and Code Quality
 
-테스트 및 대상 모듈이 구현된 후 다음 명령으로 검사한다.
+다음 명령으로 검사한다.
 
 ```bash
 # 단위 및 통합 테스트
@@ -432,9 +440,9 @@ uv build
 
 ## 11. Roadmap
 
-- [ ] **M0 — Specification:** 논리 체계, 표현식 및 증명 객체 형식 명세
-- [ ] **M1 — AxiomCore:** 명제 논리 AST 및 최소 자연 연역 검증 커널
-- [ ] **M2 — AxiomWeave v0.1:** Python DSL, 기본 전술, 명제 논리 정리 라이브러리 및 CLI
+- [x] **M0 — Specification:** 논리 체계, 표현식 및 증명 객체 형식 명세
+- [x] **M1 — AxiomCore:** 명제 논리 AST 및 최소 자연 연역 검증 커널
+- [ ] **M2 — AxiomWeave v0.1:** Python DSL, 기본 전술, 명제 논리 정리 라이브러리 및 CLI (DSL·전술·CLI 구현됨, 정리 라이브러리는 `classical`만 있음)
 - [ ] **M3 — Arithmetic:** 타입이 지정된 항, 양화사, 등식, 자연수 및 귀납법
 - [ ] **M4 — Interoperability:** SymPy, SMT, Lean 연계와 검증 가능한 인증서 변환
 - [ ] **M5 — AxiomAI:** 정리 검색, 자동 증명 탐색 및 벤치마크
