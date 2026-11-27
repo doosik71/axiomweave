@@ -100,9 +100,11 @@ from axiomweave import Prop, Theory, Implies
 P, Q, R = (Prop.symbol(name) for name in ("P", "Q", "R"))
 thy = Theory("demo.logic")
 
+
 @thy.theorem
 def implication_transitivity() -> Prop:
     return Implies(P >> Q, Q >> R, P >> R)
+
 
 @thy.proof(implication_transitivity)
 def prove_implication_transitivity(ctx):
@@ -113,6 +115,7 @@ def prove_implication_transitivity(ctx):
     hq = ctx.mp(hpq, hp)
     hr = ctx.mp(hqr, hq)
     ctx.exact(hr)
+
 
 report = thy.check()
 ```
@@ -140,9 +143,11 @@ from axiomweave.lib.algebra import algebra, sq_nonneg
 
 thy = Theory("demo.real", imports=[algebra])
 
+
 @thy.theorem
 def square_nonnegative(x: Real) -> Prop:
     return x**2 >= 0
+
 
 @thy.proof(square_nonnegative)
 def prove_square_nonnegative(ctx):

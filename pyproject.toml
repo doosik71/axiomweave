@@ -26,6 +26,7 @@ dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "mypy"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

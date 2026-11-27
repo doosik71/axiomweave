@@ -401,6 +401,7 @@ thy = Theory("demo.logic")
 def imp_trans() -> Prop:
     return Implies(P >> Q, Q >> R, P >> R)
 
+
 @thy.proof(imp_trans)
 def _(ctx):
     hpq = ctx.intro()
@@ -419,6 +420,7 @@ def _(ctx):
 def and_comm() -> Prop:
     return (P & Q) >> (Q & P)
 
+
 @thy.proof(and_comm)
 def _(ctx):
     h = ctx.intro()
@@ -435,6 +437,7 @@ def _(ctx):
 @thy.theorem
 def or_comm() -> Prop:
     return (P | Q) >> (Q | P)
+
 
 @thy.proof(or_comm)
 def _(ctx):
@@ -455,12 +458,13 @@ def _(ctx):
 def curry() -> Prop:
     return ((P & Q) >> R) >> Implies(P, Q, R)
 
+
 @thy.proof(curry)
 def _(ctx):
     h = ctx.intro()
     hp = ctx.intro()
     hq = ctx.intro()
-    ctx.apply(h)              # 목표: P ∧ Q
+    ctx.apply(h)  # 목표: P ∧ Q
     ctx.exact(ctx.and_intro(hp, hq))
 ```
 
@@ -469,9 +473,11 @@ def _(ctx):
 ```python
 A, B, C = (Prop.symbol(name) for name in ("A", "B", "C"))
 
+
 @thy.theorem
 def and_comm_inst() -> Prop:
     return ((A | B) & C) >> (C & (A | B))
+
 
 @thy.proof(and_comm_inst)
 def _(ctx):
@@ -485,21 +491,24 @@ from axiomweave.lib.logic.classical import classical, em
 
 cthy = Theory("demo.classical", imports=[classical])
 
+
 @cthy.theorem
 def dne_again() -> Prop:
     return ~~P >> P
 
+
 @cthy.proof(dne_again)
 def _(ctx):
-    h = ctx.intro()                      # h : (P → ⊥) → ⊥
-    hp, hnp = ctx.cases(ctx.thm(em))     # P ∨ (P → ⊥)
+    h = ctx.intro()  # h : (P → ⊥) → ⊥
+    hp, hnp = ctx.cases(ctx.thm(em))  # P ∨ (P → ⊥)
     with ctx.focus():
         ctx.exact(hp)
     with ctx.focus():
         ctx.exfalso()
         ctx.exact(ctx.mp(h, hnp))
 
-report = cthy.check()                    # dne_again.axioms == {"classical.em"}
+
+report = cthy.check()  # dne_again.axioms == {"classical.em"}
 ```
 
 ### 11.7. 오류 예

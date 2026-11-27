@@ -215,10 +215,7 @@ def prove_positive_square(ctx):
     h1 = ctx.have(x - 2 > 0, by=linarith(h))
     h2 = ctx.have(x + 2 > 0, by=linarith(h))
 
-    h3 = ctx.have(
-        (x - 2) * (x + 2) > 0,
-        by=mul_pos(h1, h2)
-    )
+    h3 = ctx.have((x - 2) * (x + 2) > 0, by=mul_pos(h1, h2))
 
     ctx.exact(nlinarith(h3))
 ```
@@ -238,7 +235,6 @@ def prove_zero_add(ctx):
     n = ctx.intro()
 
     with ctx.induction(n) as ind:
-
         with ind.base():
             ctx.rfl()
 
