@@ -1,6 +1,6 @@
 # AxiomWeave 언어 명세 (Language Specification)
 
-> **문서 상태:** 초안(Draft) · 단편 L0, L1, L2 · 대상 버전 v0.1 (L1: [§12](#12-단편-l1-dsl), L2: [§13](#13-단편-l2-dsl))  
+> **문서 상태:** 초안(Draft) · 단편 L0, L1, L2 · 대상 버전 v0.1 (L1: [§12](#12-단편-l1-dsl), L2: [§13](#13-단편-l2-dsl)) · L3 개정안([§14](#14-단계-l3-dsl-자연수-개정안)) 검토 대기  
 > 상위 문서: [specification.md](specification.md), 논리 규칙: [logic-spec.md](logic-spec.md). 이 문서는 v0.1 Python 임베디드 DSL의 표면 문법, 선언과 증명 작성 방식, 커널 입력으로의 변환(Elaboration)을 정의한다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위
@@ -911,10 +911,99 @@ def _(ctx):
 | 목표에 없는 항으로 `ctx.rewrite(h)`                   | `TacticError`                                    |
 | `ctx.trans(f, g)`에서 가운데 항이 다름               | `TacticError`                                    |
 
-## 14. 확장 시 유의 사항
+## 14. 단계 L3 DSL: 자연수 (개정안)
 
-이 절은 L3 이후 개정을 위한 비규범적 메모이다.
+> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 [logic-spec.md §14](logic-spec.md#14-단계-l3-자연수와-귀납-개정안)의 표준 산술 Theory를 Python DSL로 제공하는 방법을 정의한다. 확정 전에는 구현하지 않으며, 이 절에서 정하지 않은 사항은 §13을 따른다.
 
-- 매개변수를 받는 정리 선언(README §4.3)은 L1·L2에 포함하지 않았다. 도입한다면 `def t(x: U)`의 매개변수를 전칭 양화로 해석하고, 정리의 적용 `t(a)`를 `ctx.spec`으로 Elaboration하는 방식을 검토한다. `@thy.definition`의 본문을 실행하지 않고 제한된 구문으로 변환하는 방식(proposal §5.5)도 함께 검토한다.
-- `unfold`, `induction` 등 전술과 자동화 전술은 해당 논리 단편이 도입된 뒤 이 문서에 추가한다. 자동화 전술도 이 문서의 전술과 마찬가지로 [7.1](#71-대응-규칙), [12.6](#126-elaboration), [13.4](#134-elaboration)의 규칙 적용만 생성해야 한다.
+### 14.1. 설계 결정 요약
+
+| 항목            | 결정                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------ |
+| 제공 위치       | 표준 Theory `arith`를 `axiomweave.lib.arithmetic.peano` 모듈로 제공한다 (§10의 표준 Theory와 같은 방식). |
+| 산술 표기       | 연산자를 오버로드하지 않는다. `add(m, n)`, `mul(m, n)`, `succ(n)`, `zero`를 쓴다.                       |
+| 수 표기         | `numeral(k)`는 $S^k(0)$을 만든다. 커널에는 수 리터럴이 없다.                                           |
+| 귀납 전술       | `ctx.induction()`은 `arith.induction` 공리의 인스턴스로 Elaboration된다. 새 커널 규칙을 만들지 않는다.   |
+| 라이브러리 정리 | `arith`는 공리 외에 덧셈의 기본 정리를 증명하여 제공한다 ([14.3](#143-표준-theory-arith)).              |
+
+### 14.2. 사용
+
+```python
+from axiomweave import Eq, ForAll, Prop, Theory, Var
+from axiomweave.lib.arithmetic.peano import Nat, add, arith, numeral, succ, zero
+
+thy = Theory("demo.nat", imports=[arith])
+n = Var("n", Nat)
+
+
+@thy.theorem
+def zero_add_example() -> Prop:
+    return ForAll(n, Eq(add(zero, n), n))
+```
+
+- 산술 공리와 정리를 쓰는 Theory는 `arith`를 가져와야 한다 ([12.2](#122-종과-상수)).
+- `numeral(k)`는 `k`가 0 이상의 Python `int`일 때만 허용한다. 그 밖의 값은 `AxwTypeError`이다. `bool`은 허용하지 않는다.
+
+### 14.3. 표준 Theory `arith`
+
+```python
+from axiomweave.lib.arithmetic.peano import arith, Nat, zero, succ, add, mul, numeral
+```
+
+| 핸들           | 종류      | 정규 이름              | 내용                                    |
+| -------------- | --------- | ---------------------- | --------------------------------------- |
+| `Nat`          | `Sort`    | `arith.Nat`            |                                         |
+| `zero`         | `Term`    | `arith.zero`           | $0$                                     |
+| `succ`         | `Const`   | `arith.succ`           | $S$                                     |
+| `add`, `mul`   | `Const`   | `arith.add`, `arith.mul` | $+$, $\times$                         |
+| `succ_ne_zero` 등 7개 | `Axiom` | `arith.succ_ne_zero` 등 | [logic-spec.md §14.3](logic-spec.md#143-표준-선언)의 공리 |
+| `zero_add`     | `Theorem` | `arith.zero_add`       | $\forall n.\, 0 + n = n$                |
+| `succ_add`     | `Theorem` | `arith.succ_add`       | $\forall m\, n.\, S(m) + n = S(m + n)$  |
+| `add_comm`     | `Theorem` | `arith.add_comm`       | $\forall m\, n.\, m + n = n + m$        |
+| `add_assoc`    | `Theorem` | `arith.add_assoc`      | $\forall k\, m\, n.\, (k + m) + n = k + (m + n)$ |
+
+- 선언 순서는 표의 순서(종, 상수, 공리, 정리)이다. 종, 상수, 공리의 이름과 명제는 kernel-spec §15의 표준 해시와 정확히 일치해야 한다.
+- 정리는 일반 증명으로 검증되며, 의존 공리 집합에 사용한 `arith.*` 공리가 기록된다. 이 Theory의 정리는 `classical.em`에 의존해서는 안 된다.
+
+### 14.4. 귀납 전술
+
+| 전술                            | 현재 목표                         | 결과                                                                                      |
+| ------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------- |
+| `ctx.induction()`               | $\forall n{:}\mathit{Nat}.\, A$    | 목표를 $A[0/n]$와 $\forall n{:}\mathit{Nat}.\, A \to A[S(n)/n]$ 두 개로 바꿈 (이 순서)    |
+
+- 목표가 종 `arith.Nat`에 대한 전칭이 아니면 `TacticError`를 일으켜야 한다.
+- 현재 Theory의 환경에 `arith`가 없으면 `DeclarationError`를 일으켜야 한다.
+- Elaboration: `arith.induction`을 $P \mapsto \lambda n.\, A$로 인스턴스화하는 $\mathrm{Ax}$와 두 번의 $\to\mathrm{E}$이다. $A$에 현재 문맥의 변수가 있어도 된다.
+- 귀납 단계 목표는 `intro`로 변수와 귀납 가정을 도입하여 증명한다.
+
+### 14.5. 예제
+
+예제는 비규범적이다.
+
+```python
+@arith.proof(zero_add)
+def _(ctx):
+    ctx.induction()
+    with ctx.focus():                      # 0 + 0 = 0
+        ctx.exact(ctx.spec(ctx.thm(add_zero), zero))
+    with ctx.focus():                      # ∀n. 0 + n = n → 0 + S(n) = S(n)
+        n = ctx.intro()
+        ih = ctx.intro()
+        step = ctx.spec(ctx.thm(add_succ), zero, n)   # 0 + S(n) = S(0 + n)
+        ctx.rewrite(step)                  # 목표: S(0 + n) = S(n)
+        ctx.rewrite(ih)                    # 목표: S(n) = S(n)
+        ctx.rfl()
+```
+
+| 오류 예                                            | 결과                 |
+| -------------------------------------------------- | -------------------- |
+| 목표가 $\forall x{:}U.\, A$ ($U \ne \mathit{Nat}$)일 때 `ctx.induction()` | `TacticError` |
+| `arith`를 가져오지 않은 Theory에서 `ctx.induction()` | `DeclarationError` (증명 상태 `REJECTED`) |
+| `numeral(-1)`, `numeral(True)`                     | `AxwTypeError`       |
+
+## 15. 확장 시 유의 사항
+
+이 절은 L4 이후 개정을 위한 비규범적 메모이다.
+
+- 매개변수를 받는 정리 선언(README §4.3)은 L1–L3에 포함하지 않았다. 도입한다면 `def t(x: U)`의 매개변수를 전칭 양화로 해석하고, 정리의 적용 `t(a)`를 `ctx.spec`으로 Elaboration하는 방식을 검토한다. `@thy.definition`의 본문을 실행하지 않고 제한된 구문으로 변환하는 방식(proposal §5.5)도 함께 검토한다.
+- `unfold` 등 전술과 자동화 전술은 해당 논리 단편이 도입된 뒤 이 문서에 추가한다. 자동화 전술도 이 문서의 전술과 마찬가지로 [7.1](#71-대응-규칙), [12.6](#126-elaboration), [13.4](#134-elaboration), [14.4](#144-귀납-전술)의 규칙 적용만 생성해야 한다.
 - 정적 린트 도구는 [4.5](#45-연산자-우선순위와-괄호-규칙)의 괄호 규칙 위반을 Python AST에서 검출할 수 있다.
