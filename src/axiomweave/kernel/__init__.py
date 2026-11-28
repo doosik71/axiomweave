@@ -1,4 +1,4 @@
-"""AxiomCore: the trusted L0 proof-checking kernel (docs/kernel-spec.md).
+"""AxiomCore: the trusted L0/L1 proof-checking kernel (docs/kernel-spec.md).
 
 This package may import only the Python standard library and its own modules.
 """

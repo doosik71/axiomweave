@@ -262,7 +262,7 @@ def test_duplicate_declaration() -> None:
         ("format", "other", E_VERSION),
         ("format_version", 2, E_VERSION),
         ("format_version", "1", E_FORMAT),
-        ("fragment", "L1", E_VERSION),
+        ("fragment", "L2", E_VERSION),
         ("theory", "bad name", E_NAME),
     ],
 )

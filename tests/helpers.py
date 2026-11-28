@@ -1,4 +1,4 @@
-"""Builders for L0 certificate JSON used by kernel tests."""
+"""Builders for L0/L1 certificate JSON used by kernel tests."""
 
 import json
 from typing import Any
@@ -109,12 +109,12 @@ def rehash(decl: JSON) -> JSON:
     return decl
 
 
-def bundle(*decls: JSON, theory: str = "demo.logic") -> JSON:
+def bundle(*decls: JSON, theory: str = "demo.logic", fragment: str = "L0") -> JSON:
     obj = {
         "format": "axwp",
         "format_version": 1,
         "spec_version": "0.1",
-        "fragment": "L0",
+        "fragment": fragment,
         "kernel_version": "0.1.0.dev0",
         "theory": theory,
         # JSON round trip copies without Python-level recursion (deep test inputs).
@@ -122,6 +122,70 @@ def bundle(*decls: JSON, theory: str = "demo.logic") -> JSON:
     }
     obj["bundle_hash"] = bundle_hash(obj)
     return obj
+
+
+def l1_bundle(*decls: JSON, theory: str = "demo.fol") -> JSON:
+    return bundle(*decls, theory=theory, fragment="L1")
+
+
+# --- fragment L1 (kernel-spec §13) --------------------------------------------
+
+
+def var(index: int) -> JSON:
+    return ["var", index]
+
+
+def app(const: str, *args: JSON) -> JSON:
+    return ["app", const, list(args)]
+
+
+def pred(const: str, *args: JSON) -> JSON:
+    return ["pred", const, list(args)]
+
+
+def pvar(name: str, *args: JSON) -> JSON:
+    return ["pvar", name, list(args)]
+
+
+def forall(sort: str, body: JSON) -> JSON:
+    return ["forall", sort, body]
+
+
+def exists(sort: str, body: JSON) -> JSON:
+    return ["exists", sort, body]
+
+
+def all_i(sort: str, body: JSON) -> JSON:
+    return {"rule": "all_i", "sort": sort, "body": body}
+
+
+def all_e(of: JSON, term: JSON) -> JSON:
+    return {"rule": "all_e", "of": of, "term": term}
+
+
+def ex_i(prop: JSON, witness: JSON, of: JSON) -> JSON:
+    return {"rule": "ex_i", "prop": prop, "witness": witness, "of": of}
+
+
+def ex_e(of: JSON, name: str, body: JSON) -> JSON:
+    return {"rule": "ex_e", "of": of, "name": name, "body": body}
+
+
+def lam(params: list[str], body: JSON) -> JSON:
+    """A predicate-abstraction substitution value."""
+    return {"params": params, "body": body}
+
+
+def sort(name: str) -> JSON:
+    decl = {"kind": "sort", "name": name}
+    decl["hash"] = declaration_hash(decl)
+    return decl
+
+
+def const(name: str, args: list[str], result: str) -> JSON:
+    decl = {"kind": "const", "name": name, "args": args, "result": result}
+    decl["hash"] = declaration_hash(decl)
+    return decl
 
 
 def encode(obj: JSON) -> bytes:

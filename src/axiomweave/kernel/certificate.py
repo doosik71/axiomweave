@@ -1,7 +1,8 @@
-"""JSON restrictions, canonical form, hashes and decoding of L0 certificates.
+"""JSON restrictions, canonical form, hashes and decoding of L0/L1 certificates.
 
 Implements kernel-spec §3 (names), §4 (propositions), §5 (derivation trees),
-§6 (bundle structure) and §7 (canonical JSON and SHA-256 hashes).
+§6 (bundle structure), §7 (canonical JSON and SHA-256 hashes) and, for
+fragment L1, §13.2–13.6 (terms, quantifiers, declarations, de Bruijn operations).
 """
 
 import hashlib
@@ -15,16 +16,22 @@ from axiomweave.kernel.errors import (
     E_FRAGMENT,
     E_LIMIT,
     E_NAME,
+    E_VAR_ESCAPE,
     E_VERSION,
     KernelError,
 )
 
 FORMAT = "axwp"
 FORMAT_VERSION = 1
-FRAGMENT = "L0"
+L0, L1 = "L0", "L1"
+FRAGMENTS = frozenset({L0, L1})
 
 RESERVED_WORDS = frozenset({"and", "or", "imp", "false"})
-FRAGMENT_TAGS = frozenset({"lam", "forall", "exists", "eq"})
+PROP_RESULT = "prop"  # `result` of a const declaration whose type ends in Prop
+
+# Tags outside each fragment that are reported as E_FRAGMENT (kernel-spec §4, §13.3).
+_OUTSIDE_L1_TAGS = frozenset({"lam", "eq"})
+_OUTSIDE_L0_TAGS = _OUTSIDE_L1_TAGS | {"pvar", "pred", "forall", "exists", "var", "app"}
 
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _HASH = re.compile(r"sha256:[0-9a-f]{64}")
@@ -178,7 +185,7 @@ def _is_identifier(text: object) -> bool:
 
 
 def check_local_name(name: object, path: str) -> str:
-    """Validate an atom or hypothesis name."""
+    """Validate an atom, schematic predicate or hypothesis name."""
     if not _is_identifier(name) or name in RESERVED_WORDS:
         _fail(E_NAME, path, f"invalid atom or hypothesis name {name!r}")
     assert isinstance(name, str)
@@ -217,16 +224,23 @@ def check_str(value: object, path: str) -> str:
     return value
 
 
-# --- propositions (kernel-spec §4) --------------------------------------------
+# --- propositions and terms (kernel-spec §4, §13.3, §13.6) --------------------
 
-Prop = int  # index into a PropTable
+Prop = int  # index into a PropTable (propositions and L1 terms share the table)
+
+# A schematic substitution value: (argument sorts, body). An atom has no
+# argument sorts; the body of a `pvar` value lives under one binder per sort.
+SubstValue = tuple[tuple[str, ...], Prop]
 
 
 class PropTable:
-    """Hash-consed proposition nodes, so that structural equality is integer equality.
+    """Hash-consed proposition and term nodes, so that structural equality is integer equality.
 
-    Nodes are ("atom", name), ("false",), or (tag, left_id, right_id) for
-    tag in {"and", "or", "imp"}.
+    Nodes are ("atom", name), ("false",), (tag, left_id, right_id) for tag in
+    {"and", "or", "imp"}, and in fragment L1 additionally ("pvar", name, args),
+    ("pred", const, args), ("forall", sort, body), ("exists", sort, body),
+    ("var", index) and ("app", const, args), where args is a tuple of term ids.
+    Bound variables are de Bruijn indices (0 = innermost binder).
     """
 
     def __init__(self) -> None:
@@ -234,6 +248,7 @@ class PropTable:
         self._index: dict[tuple[Any, ...], int] = {}
         self._budget: int | None = None
         self._atoms: dict[int, frozenset[str]] = {}
+        self._loose: dict[int, int] = {}
 
     def set_budget(self, budget: int | None) -> None:
         """Limit the number of new nodes until the next call (None = unlimited)."""
@@ -252,49 +267,167 @@ class PropTable:
         return len(self.nodes) - 1
 
     def atoms(self, prop: Prop) -> frozenset[str]:
+        """Names of the schematic variables (atoms and `pvar`s) occurring in `prop`."""
         cached = self._atoms.get(prop)
         if cached is not None:
             return cached
         node = self.nodes[prop]
-        if node[0] == "atom":
+        tag = node[0]
+        if tag in ("atom", "pvar"):
             result = frozenset({node[1]})
-        elif node[0] == "false":
-            result = frozenset()
-        else:
+        elif tag in ("and", "or", "imp"):
             result = self.atoms(node[1]) | self.atoms(node[2])
+        elif tag in ("forall", "exists"):
+            result = self.atoms(node[2])
+        else:  # false, pred and terms contain no schematic variables
+            result = frozenset()
         self._atoms[prop] = result
         return result
 
-    def substitute(self, prop: Prop, subst: dict[str, Prop]) -> Prop:
-        """Simultaneous substitution of atoms (logic-spec §6.1)."""
-        memo: dict[Prop, Prop] = {}
+    def loose(self, prop: Prop) -> int:
+        """One more than the largest free de Bruijn index (0 if there is none)."""
+        cached = self._loose.get(prop)
+        if cached is not None:
+            return cached
+        node = self.nodes[prop]
+        tag = node[0]
+        if tag == "var":
+            result = node[1] + 1
+        elif tag in ("app", "pred", "pvar"):
+            result = max((self.loose(a) for a in node[2]), default=0)
+        elif tag in ("and", "or", "imp"):
+            result = max(self.loose(node[1]), self.loose(node[2]))
+        elif tag in ("forall", "exists"):
+            result = max(self.loose(node[2]) - 1, 0)
+        else:
+            result = 0
+        self._loose[prop] = result
+        return result
 
-        def go(p: Prop) -> Prop:
-            if p in memo:
-                return memo[p]
+    def _map_vars(self, prop: Prop, leaf: Any, threshold: int) -> Prop:
+        """Rebuild `prop`, replacing each ("var", i) at binder depth j by leaf(i, j).
+
+        Subterms whose free indices are all below `threshold + j` are kept as is.
+        """
+        memo: dict[tuple[Prop, int], Prop] = {}
+
+        def go(p: Prop, depth: int) -> Prop:
+            if self.loose(p) <= threshold + depth:
+                return p
+            key = (p, depth)
+            found = memo.get(key)
+            if found is not None:
+                return found
             node = self.nodes[p]
-            if node[0] == "atom":
-                result = subst.get(node[1], p)
-            elif node[0] == "false":
-                result = p
-            else:
-                result = self.make((node[0], go(node[1]), go(node[2])))
-            memo[p] = result
+            tag = node[0]
+            if tag == "var":
+                result: Prop = leaf(node[1], depth)
+            elif tag in ("app", "pred", "pvar"):
+                result = self.make((tag, node[1], tuple(go(a, depth) for a in node[2])))
+            elif tag in ("forall", "exists"):
+                result = self.make((tag, node[1], go(node[2], depth + 1)))
+            else:  # and, or, imp
+                result = self.make((tag, go(node[1], depth), go(node[2], depth)))
+            memo[key] = result
             return result
 
-        return go(prop)
+        return go(prop, 0)
+
+    def shift(self, prop: Prop, amount: int, cutoff: int = 0) -> Prop:
+        """Add `amount` to free indices >= cutoff (kernel-spec §13.6 shift, shift')."""
+        if amount == 0:
+            return prop
+        return self._map_vars(prop, lambda i, j: self.make(("var", i + amount)), cutoff)
+
+    def instantiate(self, prop: Prop, terms: tuple[Prop, ...]) -> Prop:
+        """Replace the n innermost free indices by `terms` (kernel-spec §13.6 inst).
+
+        `prop` lives under n extra binders; the last term replaces index 0.
+        """
+        n = len(terms)
+
+        def leaf(i: int, j: int) -> Prop:
+            if i < j + n:
+                return self.shift(terms[n - 1 - (i - j)], j)
+            return self.make(("var", i - n))
+
+        return self._map_vars(prop, leaf, 0)
+
+    def lower(self, prop: Prop, path: str) -> Prop:
+        """Drop the innermost binder from scope; fail if it occurs (kernel-spec §13.6)."""
+
+        def leaf(i: int, j: int) -> Prop:
+            if i == j:
+                _fail(E_VAR_ESCAPE, path, "the witness variable occurs in the conclusion")
+            return self.make(("var", i - 1))
+
+        return self._map_vars(prop, leaf, 0)
+
+    def substitute(self, prop: Prop, subst: dict[str, SubstValue]) -> Prop:
+        """Simultaneous schematic substitution (logic-spec §6.1, §12.6; kernel-spec §13.6)."""
+        memo: dict[tuple[Prop, int], Prop] = {}
+
+        def go(p: Prop, depth: int) -> Prop:
+            if not (self.atoms(p) & subst.keys()):
+                return p
+            key = (p, depth)
+            found = memo.get(key)
+            if found is not None:
+                return found
+            node = self.nodes[p]
+            tag = node[0]
+            if tag == "atom":
+                result = self.shift(subst[node[1]][1], depth)
+            elif tag == "pvar":
+                params, body = subst[node[1]]
+                result = self.instantiate(self.shift(body, depth, len(params)), node[2])
+            elif tag in ("forall", "exists"):
+                result = self.make((tag, node[1], go(node[2], depth + 1)))
+            else:  # and, or, imp; other nodes contain no schematic variables
+                result = self.make((tag, go(node[1], depth), go(node[2], depth)))
+            memo[key] = result
+            return result
+
+        return go(prop, 0)
 
     def show(self, prop: Prop) -> str:
         node = self.nodes[prop]
-        if node[0] == "atom":
+        tag = node[0]
+        if tag == "atom":
             return str(node[1])
-        if node[0] == "false":
+        if tag == "false":
             return "⊥"
-        symbol = {"and": "∧", "or": "∨", "imp": "→"}[node[0]]
+        if tag == "var":
+            return f"#{node[1]}"
+        if tag in ("app", "pred", "pvar"):
+            return f"{node[1]}({', '.join(self.show(a) for a in node[2])})"
+        if tag in ("forall", "exists"):
+            quantifier = "∀" if tag == "forall" else "∃"
+            return f"({quantifier}:{node[1]}. {self.show(node[2])})"
+        symbol = {"and": "∧", "or": "∨", "imp": "→"}[tag]
         return f"({self.show(node[1])} {symbol} {self.show(node[2])})"
 
 
-def decode_prop(value: object, table: PropTable, path: str) -> Prop:
+def decode_term(value: object, table: PropTable, path: str) -> Prop:
+    """Decode an L1 individual term (kernel-spec §13.3)."""
+    if not isinstance(value, list) or not value or not isinstance(value[0], str):
+        _fail(E_FORMAT, path, "a term must be an array starting with a tag")
+    tag = value[0]
+    if tag == "var" and len(value) == 2 and type(value[1]) is int:
+        return table.make(("var", value[1]))
+    if tag == "app" and len(value) == 3:
+        name = check_decl_name(value[1], f"{path}[1]")
+        return table.make(("app", name, _decode_args(value[2], table, f"{path}[2]")))
+    _fail(E_FORMAT, path, f"malformed term with tag {tag!r} and {len(value)} elements")
+
+
+def _decode_args(value: object, table: PropTable, path: str) -> tuple[Prop, ...]:
+    if not isinstance(value, list):
+        _fail(E_FORMAT, path, "arguments must be an array")
+    return tuple(decode_term(v, table, f"{path}[{i}]") for i, v in enumerate(value))
+
+
+def decode_prop(value: object, table: PropTable, path: str, fragment: str = L0) -> Prop:
     if not isinstance(value, list) or not value or not isinstance(value[0], str):
         _fail(E_FORMAT, path, "a proposition must be an array starting with a tag")
     tag = value[0]
@@ -303,88 +436,119 @@ def decode_prop(value: object, table: PropTable, path: str) -> Prop:
     if tag == "false" and len(value) == 1:
         return table.make(("false",))
     if tag in ("and", "or", "imp") and len(value) == 3:
-        left = decode_prop(value[1], table, f"{path}[1]")
-        right = decode_prop(value[2], table, f"{path}[2]")
+        left = decode_prop(value[1], table, f"{path}[1]", fragment)
+        right = decode_prop(value[2], table, f"{path}[2]", fragment)
         return table.make((tag, left, right))
-    if tag in FRAGMENT_TAGS:
-        _fail(E_FRAGMENT, path, f"'{tag}' is outside fragment L0")
+    if fragment == L1:
+        if tag == "pvar" and len(value) == 3:
+            name = check_local_name(value[1], f"{path}[1]")
+            args = _decode_args(value[2], table, f"{path}[2]")
+            if not args:
+                _fail(E_FORMAT, path, "a 'pvar' without arguments must be written as 'atom'")
+            return table.make(("pvar", name, args))
+        if tag == "pred" and len(value) == 3:
+            name = check_decl_name(value[1], f"{path}[1]")
+            return table.make(("pred", name, _decode_args(value[2], table, f"{path}[2]")))
+        if tag in ("forall", "exists") and len(value) == 3:
+            sort = check_decl_name(value[1], f"{path}[1]")
+            return table.make((tag, sort, decode_prop(value[2], table, f"{path}[2]", fragment)))
+    outside = _OUTSIDE_L1_TAGS if fragment == L1 else _OUTSIDE_L0_TAGS
+    if tag in outside:
+        _fail(E_FRAGMENT, path, f"'{tag}' is outside fragment {fragment}")
     _fail(E_FORMAT, path, f"malformed proposition with tag {tag!r} and {len(value)} elements")
 
 
-# --- derivation trees (kernel-spec §5) ----------------------------------------
+# --- derivation trees (kernel-spec §5, §13.5) ---------------------------------
 
 # Decoded derivation node: (rule, path, *fields). Fields keep the visiting
-# order of kernel-spec §8.4.
+# order of kernel-spec §8.4 and §13.8.
 Node = tuple[Any, ...]
 
-_RULE_KEYS: dict[str, tuple[str, ...]] = {
-    "hyp": ("name",),
-    "and_i": ("left", "right"),
-    "and_e1": ("of",),
-    "and_e2": ("of",),
-    "or_i1": ("of", "right"),
-    "or_i2": ("left", "of"),
-    "or_e": ("of", "left_name", "left", "right_name", "right"),
-    "imp_i": ("name", "hyp", "body"),
-    "imp_e": ("fn", "arg"),
-    "false_e": ("of", "goal"),
-    "thm": ("name", "hash", "subst"),
-    "ax": ("name", "hash", "subst"),
+# Field kinds: D = derivation, P = proposition, H = local (hypothesis) name,
+# N = declaration name, X = hash, S = substitution, T = term, Y = sort name.
+_RULE_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
+    "hyp": (("name", "H"),),
+    "and_i": (("left", "D"), ("right", "D")),
+    "and_e1": (("of", "D"),),
+    "and_e2": (("of", "D"),),
+    "or_i1": (("of", "D"), ("right", "P")),
+    "or_i2": (("left", "P"), ("of", "D")),
+    "or_e": (("of", "D"), ("left_name", "H"), ("left", "D"), ("right_name", "H"), ("right", "D")),
+    "imp_i": (("name", "H"), ("hyp", "P"), ("body", "D")),
+    "imp_e": (("fn", "D"), ("arg", "D")),
+    "false_e": (("of", "D"), ("goal", "P")),
+    "thm": (("name", "N"), ("hash", "X"), ("subst", "S")),
+    "ax": (("name", "N"), ("hash", "X"), ("subst", "S")),
+}
+_L1_RULE_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
+    "all_i": (("sort", "Y"), ("body", "D")),
+    "all_e": (("of", "D"), ("term", "T")),
+    "ex_i": (("prop", "P"), ("witness", "T"), ("of", "D")),
+    "ex_e": (("of", "D"), ("name", "H"), ("body", "D")),
 }
 
-# Which fields hold sub-derivations, propositions, or local names, per rule.
-_DERIVATION_FIELDS = {"of", "body", "fn", "arg"} | {"left", "right"}
-_PROP_FIELDS: dict[str, set[str]] = {
-    "or_i1": {"right"},
-    "or_i2": {"left"},
-    "imp_i": {"hyp"},
-    "false_e": {"goal"},
-}
-_LOCAL_NAME_FIELDS = {"left_name", "right_name"}
 
-
-def decode_derivation(value: object, table: PropTable, path: str) -> Node:
+def decode_derivation(value: object, table: PropTable, path: str, fragment: str = L0) -> Node:
     if not isinstance(value, dict) or not isinstance(value.get("rule"), str):
         _fail(E_FORMAT, path, "a derivation node must be an object with a 'rule' string")
     rule = value["rule"]
-    keys = _RULE_KEYS.get(rule)
-    if keys is None:
+    fields_spec = _RULE_FIELDS.get(rule)
+    if fields_spec is None and rule in _L1_RULE_FIELDS:
+        if fragment != L1:
+            _fail(E_FRAGMENT, path, f"rule {rule!r} is outside fragment {fragment}")
+        fields_spec = _L1_RULE_FIELDS[rule]
+    if fields_spec is None:
         _fail(E_FORMAT, path, f"unknown rule {rule!r}")
-    check_keys(value, {"rule", *keys}, path)
+    check_keys(value, {"rule", *(key for key, _ in fields_spec)}, path)
 
     fields: list[Any] = []
-    for key in keys:
+    for key, kind in fields_spec:
         item = value[key]
         sub = f"{path}.{key}"
-        if rule in ("thm", "ax"):
-            if key == "name":
-                fields.append(check_decl_name(item, sub))
-            elif key == "hash":
-                fields.append(check_hash(item, sub))
-            else:
-                fields.append(decode_subst(item, table, sub))
-        elif key in _PROP_FIELDS.get(rule, set()):
-            fields.append(decode_prop(item, table, sub))
-        elif key == "name" or key in _LOCAL_NAME_FIELDS:
+        if kind == "D":
+            fields.append(decode_derivation(item, table, sub, fragment))
+        elif kind == "P":
+            fields.append(decode_prop(item, table, sub, fragment))
+        elif kind == "H":
             fields.append(check_local_name(item, sub))
-        elif key in _DERIVATION_FIELDS:
-            fields.append(decode_derivation(item, table, sub))
-        else:  # pragma: no cover - every key of _RULE_KEYS is classified above
-            _fail(E_FORMAT, sub, f"unclassified field {key!r}")
+        elif kind in ("N", "Y"):
+            fields.append(check_decl_name(item, sub))
+        elif kind == "X":
+            fields.append(check_hash(item, sub))
+        elif kind == "T":
+            fields.append(decode_term(item, table, sub))
+        else:  # "S"
+            fields.append(decode_subst(item, table, sub, fragment))
     return (rule, path, *fields)
 
 
-def decode_subst(value: object, table: PropTable, path: str) -> dict[str, Prop]:
+def decode_subst(
+    value: object, table: PropTable, path: str, fragment: str = L0
+) -> dict[str, SubstValue]:
+    """Decode a substitution. Array values are propositions for atoms; in L1, objects
+    with exactly `params` and `body` are predicate abstractions (kernel-spec §13.5)."""
     if not isinstance(value, dict):
         _fail(E_FORMAT, path, "a substitution must be an object")
-    result: dict[str, Prop] = {}
+    result: dict[str, SubstValue] = {}
     for key in sorted(value):
         name = check_local_name(key, f"{path}.{key}")
-        result[name] = decode_prop(value[key], table, f"{path}.{key}")
+        item = value[key]
+        sub = f"{path}.{key}"
+        if isinstance(item, dict):
+            if fragment != L1:
+                _fail(E_FRAGMENT, sub, f"predicate substitution is outside fragment {fragment}")
+            check_keys(item, {"params", "body"}, sub)
+            params = item["params"]
+            if not isinstance(params, list) or not params:
+                _fail(E_FORMAT, f"{sub}.params", "params must be a non-empty array of sorts")
+            sorts = tuple(check_decl_name(s, f"{sub}.params[{i}]") for i, s in enumerate(params))
+            result[name] = (sorts, decode_prop(item["body"], table, f"{sub}.body", fragment))
+        else:
+            result[name] = ((), decode_prop(item, table, sub, fragment))
     return result
 
 
-# --- bundle structure (kernel-spec §6) ----------------------------------------
+# --- bundle structure (kernel-spec §6, §13.4) ---------------------------------
 
 _BUNDLE_KEYS = {
     "format",
@@ -396,23 +560,30 @@ _BUNDLE_KEYS = {
     "declarations",
     "bundle_hash",
 }
-_AXIOM_KEYS = {"kind", "name", "statement", "hash"}
-_THEOREM_KEYS = {"kind", "name", "statement", "proof", "hash", "axioms"}
+_DECL_KEYS: dict[str, set[str]] = {
+    "axiom": {"kind", "name", "statement", "hash"},
+    "theorem": {"kind", "name", "statement", "proof", "hash", "axioms"},
+    "sort": {"kind", "name", "hash"},
+    "const": {"kind", "name", "args", "result", "hash"},
+}
+_L1_KINDS = frozenset({"sort", "const"})
 
 
 @dataclass(frozen=True)
 class Declaration:
-    """A structurally valid declaration (kernel-spec §6.1)."""
+    """A structurally valid declaration (kernel-spec §6.1, §13.4)."""
 
     index: int
     kind: str
     name: str
-    statement: Prop
-    proof: Node | None
+    statement: Prop | None  # axioms and theorems
+    proof: Node | None  # theorems
     recorded_hash: str
     computed_hash: str
     recorded_axioms: tuple[str, ...]
     path: str
+    args: tuple[str, ...] = ()  # const argument sorts
+    result: str = ""  # const result sort, or PROP_RESULT
 
 
 def check_bundle_header(bundle: object, limits: Limits) -> dict[str, Any]:
@@ -424,7 +595,7 @@ def check_bundle_header(bundle: object, limits: Limits) -> dict[str, Any]:
         _fail(E_FORMAT, "$.format_version", "format_version must be an integer")
     if obj["format_version"] != FORMAT_VERSION:
         _fail(E_VERSION, "$.format_version", f"unsupported version {obj['format_version']}")
-    if obj["fragment"] != FRAGMENT:
+    if obj["fragment"] not in FRAGMENTS:
         _fail(E_VERSION, "$.fragment", f"unsupported fragment {obj['fragment']!r}")
     check_str(obj["spec_version"], "$.spec_version")
     check_str(obj["kernel_version"], "$.kernel_version")
@@ -437,26 +608,38 @@ def check_bundle_header(bundle: object, limits: Limits) -> dict[str, Any]:
     return obj
 
 
-def decode_declaration(value: object, index: int, table: PropTable) -> Declaration:
+def decode_declaration(
+    value: object, index: int, table: PropTable, fragment: str = L0
+) -> Declaration:
     """Stage 3: structure, names and encodings of one declaration."""
     path = f"$.declarations[{index}]"
     if not isinstance(value, dict):
         _fail(E_FORMAT, path, "a declaration must be an object")
     kind = value.get("kind")
-    if kind == "axiom":
-        check_keys(value, _AXIOM_KEYS, path)
-    elif kind == "theorem":
-        check_keys(value, _THEOREM_KEYS, path)
-    else:
+    if not isinstance(kind, str) or kind not in _DECL_KEYS:
         _fail(E_FORMAT, f"{path}.kind", f"unknown declaration kind {kind!r}")
+    if kind in _L1_KINDS and fragment != L1:
+        _fail(E_FRAGMENT, f"{path}.kind", f"'{kind}' declarations are outside fragment {fragment}")
+    check_keys(value, _DECL_KEYS[kind], path)
 
     name = check_decl_name(value["name"], f"{path}.name")
-    statement = decode_prop(value["statement"], table, f"{path}.statement")
+    statement = None
     proof = None
     axioms: tuple[str, ...] = ()
+    args: tuple[str, ...] = ()
+    result = ""
+    if kind in ("axiom", "theorem"):
+        statement = decode_prop(value["statement"], table, f"{path}.statement", fragment)
     if kind == "theorem":
-        proof = decode_derivation(value["proof"], table, f"{path}.proof")
+        proof = decode_derivation(value["proof"], table, f"{path}.proof", fragment)
         axioms = _decode_axiom_list(value["axioms"], f"{path}.axioms")
+    if kind == "const":
+        if not isinstance(value["args"], list):
+            _fail(E_FORMAT, f"{path}.args", "args must be an array of sort names")
+        args = tuple(check_decl_name(s, f"{path}.args[{i}]") for i, s in enumerate(value["args"]))
+        result = value["result"]
+        if result != PROP_RESULT:
+            result = check_decl_name(result, f"{path}.result")
     recorded = check_hash(value["hash"], f"{path}.hash")
     return Declaration(
         index=index,
@@ -468,6 +651,8 @@ def decode_declaration(value: object, index: int, table: PropTable) -> Declarati
         computed_hash=declaration_hash(value),
         recorded_axioms=axioms,
         path=path,
+        args=args,
+        result=result,
     )
 
 
