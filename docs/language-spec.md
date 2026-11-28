@@ -962,6 +962,7 @@ from axiomweave.lib.arithmetic.peano import arith, Nat, zero, succ, add, mul, nu
 | `succ_add`     | `Theorem` | `arith.succ_add`       | $\forall m\, n.\, S(m) + n = S(m + n)$  |
 | `add_comm`     | `Theorem` | `arith.add_comm`       | $\forall m\, n.\, m + n = n + m$        |
 | `add_assoc`    | `Theorem` | `arith.add_assoc`      | $\forall k\, m\, n.\, (k + m) + n = k + (m + n)$ |
+| `add_right_comm`, `succ_eq_add_one`, `zero_mul`, `mul_one`, `succ_mul`, `one_mul`, `mul_comm`, `mul_add`, `add_mul`, `mul_assoc`, `mul_right_comm` | `Theorem` | `arith.add_right_comm` 등 | 가환 반환 법칙 ([interop-spec.md §5.5](interop-spec.md#55-재구성)) |
 
 - 선언 순서는 표의 순서(종, 상수, 공리, 정리)이다. 종, 상수, 공리의 이름과 명제는 kernel-spec §15의 표준 해시와 정확히 일치해야 한다.
 - 정리는 일반 증명으로 검증되며, 의존 공리 집합에 사용한 `arith.*` 공리가 기록된다. 이 Theory의 정리는 `classical.em`에 의존해서는 안 된다.
@@ -971,6 +972,7 @@ from axiomweave.lib.arithmetic.peano import arith, Nat, zero, succ, add, mul, nu
 | 전술                            | 현재 목표                         | 결과                                                                                      |
 | ------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------- |
 | `ctx.induction()`               | $\forall n{:}\mathit{Nat}.\, A$    | 목표를 $A[0/n]$와 $\forall n{:}\mathit{Nat}.\, A \to A[S(n)/n]$ 두 개로 바꿈 (이 순서)    |
+| `ctx.ring()`, `ctx.ring_eq(t, u)` | $t =_{\mathit{Nat}} u$ (다항식 항등식) | 목표를 닫음 / $t = u$인 `Fact` ([interop-spec.md §5](interop-spec.md#5-sympy-산술-정규화)) |
 
 - 목표가 종 `arith.Nat`에 대한 전칭이 아니면 `TacticError`를 일으켜야 한다.
 - 전술은 공리를 정규 이름 `arith.induction`으로 현재 Theory의 환경에서 찾는다. 따라서 라이브러리 모듈이 어떤 경로로 로드되었든 환경에 있는 `arith`를 사용한다. 환경에 없으면 `DeclarationError`를 일으켜야 한다.

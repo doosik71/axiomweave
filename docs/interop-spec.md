@@ -1,6 +1,6 @@
 # AxiomWeave 상호운용 명세 (Interoperability Specification)
 
-> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`) · §4 확정 · 구현됨 (`axiomweave.backends.smt`, `ctx.counterexample`) · §5 개정안 검토 대기  
+> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`) · §4 확정 · 구현됨 (`axiomweave.backends.smt`, `ctx.counterexample`) · §5 확정 · 구현됨 (`ctx.ring`, `axiomweave.language.ring`, `axiomweave.backends.symbolic`)  
 > 상위 문서: [specification.md](specification.md). 이 문서는 AxiomWeave와 외부 정리 증명 시스템·도구 사이의 변환을 정의한다. 첫 대상은 검증된 인증서를 Lean 4 소스로 내보내는 교차 검증(§3)이고, 다음은 SMT 솔버로 증명할 수 없는 목표의 반례를 찾는 것(§4)과 SymPy로 판정한 다항식 등식을 증명으로 재구성하는 것(§5)이다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위와 원칙
@@ -10,7 +10,7 @@
 | 커널이 수락한 인증서(L0–L2, L3 산술)의 Lean 4 소스 변환    | Lean 증명이나 정리를 AxiomWeave로 가져오기 (`EXTERNAL_VERIFIED`) |
 | 변환 결과를 Lean으로 다시 검사하는 교차 검증 절차          | SMT 응답의 증명 재구성, SymPy 후보 생성                         |
 | Z3 반례 탐색 (§4)                                          |                                                                 |
-| SymPy 다항식 등식 판정과 증명 재구성 (§5, 개정안)          |                                                                 |
+| SymPy 다항식 등식 판정과 증명 재구성 (§5)                  |                                                                 |
 | 표준 공리의 Lean 대응과 그 증명                            | Mathlib 의존, Lean 외 시스템(Rocq, Isabelle)                    |
 
 다음 원칙은 이 문서의 모든 연계에 적용한다.
@@ -298,9 +298,9 @@ counterexample(ForAll([m, n], Eq(add(m, n), add(n, m))))   # none: ℕ에서 참
 - CLI 명령(`axw counterexample` 등)과 증명 실패 진단에 반례를 자동으로 붙이는 기능은 포함하지 않는다.
 - SMT 응답을 증명으로 재구성하는 기능(§6)은 포함하지 않는다.
 
-## 5. SymPy 산술 정규화 (개정안)
+## 5. SymPy 산술 정규화
 
-> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 SymPy를 사용하여 자연수 다항식 등식을 판정하고, 그 등식을 커널 도출로 재구성하여 증명하는 전술을 정의한다. 새 커널 규칙이나 공리를 추가하지 않는다.
+> **상태:** 확정 · 구현됨. 이 절은 SymPy를 사용하여 자연수 다항식 등식을 판정하고, 그 등식을 커널 도출로 재구성하여 증명하는 전술을 정의한다. 새 커널 규칙이나 공리를 추가하지 않는다.
 
 ### 5.1. 목적과 지위
 
@@ -358,32 +358,37 @@ counterexample(ForAll([m, n], Eq(add(m, n), add(n, m))))   # none: ℕ에서 참
 
 재구성은 SymPy와 독립적인 Python 정규화기가 한다. 정규화기는 각 변 $t$에 대해 $t = \mathrm{nf}(t)$의 도출을 만들고, $\mathrm{nf}(t)$와 $\mathrm{nf}(u)$가 구문적으로 같으면 대칭과 추이로 $t = u$를 얻는다.
 
-**정규형.** $\mathrm{nf}(t)$는 단항식의 합이다.
+**정규형.** $\mathrm{nf}(t)$는 단위 단항식의 합이다. 계수 $c$는 같은 단위 단항식을 $c$번 더한 것으로 나타내므로, 재구성에 수(numeral) 계산이 필요 없다.
 
-- 단항식은 원자들의 곱에 계수 $c \ge 1$을 붙인 것이다. 원자는 고정된 전순서로 정렬하여 왼쪽으로 결합한 `mul`로 쓰고, 계수는 $c > 1$일 때 `mul(numeral(c), …)`로 붙인다. 원자가 없는 단항식은 `numeral(c)`이다.
-- 다항식은 단항식을 고정된 전순서로 정렬하여 왼쪽으로 결합한 `add`이다. 빈 합은 `zero`이다.
-- 전순서는 원자와 단항식의 정규 이름 기반 표시로 정하며, 같은 입력에 대해 결정적이어야 한다. 정규형의 구체적 모양은 사용자에게 노출하지 않는다.
+- 단위 단항식은 원자들의 곱이다. 원자는 고정된 전순서로 정렬하여 왼쪽으로 결합한 `mul`로 쓴다. 원자가 없는 단위 단항식(상수 1)은 `succ(zero)`이다.
+- 다항식은 단위 단항식을 고정된 전순서(차수, 그다음 원자 열)로 정렬하여 왼쪽으로 결합한 `add`이다. 빈 합은 `zero`이다.
+- 원자의 순서는 정규 이름을 쓰는 원자 키로 정하며, 같은 입력에 대해 결정적이다. 정규형의 구체적 모양은 사용자에게 노출하지 않는다.
+- 정규화기는 덧셈을 삽입 정렬로, 곱셈을 분배 후 단항식 곱으로 계산하며, 각 단계를 아래 정리의 인스턴스와 `congr`로 증명한다.
 
-**사용하는 정리.** 도출은 $\mathrm{Eq}\text{-refl}$, $\mathrm{Eq}\text{-E}$ (기존 `rewrite`, `symm`, `trans`, `congr`의 도출)와 다음 `arith` 정리·공리의 인스턴스로만 이루어진다. 아래에서 표준 Theory에 없는 정리는 이 개정안과 함께 `lib.arithmetic.peano`에 귀납으로 증명하여 추가한다 ([language-spec.md §14.3](language-spec.md#143-표준-theory-arith)).
+**사용하는 정리.** 도출은 $\mathrm{Eq}\text{-refl}$, $\mathrm{Eq}\text{-E}$ (기존 `symm`, `trans`, `congr`의 도출)와 다음 `arith` 정리의 인스턴스로만 이루어진다. 추가된 정리는 `lib.arithmetic.peano`에서 귀납으로 증명된다 ([language-spec.md §14.3](language-spec.md#143-표준-theory-arith)).
 
-| 정리                    | 명제                                          | 상태 |
-| ----------------------- | --------------------------------------------- | ---- |
-| `add_zero`, `add_succ`, `mul_zero`, `mul_succ` | 공리                    | 있음 |
-| `zero_add`, `succ_add`, `add_comm`, `add_assoc` | 정리                   | 있음 |
-| `add_left_comm`         | $k + (m + n) = m + (k + n)$                   | 추가 |
-| `succ_eq_add_one`       | $S(n) = n + 1$                                | 추가 |
-| `zero_mul`, `succ_mul`  | $0 \cdot n = 0$, $S(m) \cdot n = m \cdot n + n$ | 추가 |
-| `mul_one`, `one_mul`    | $n \cdot 1 = n$, $1 \cdot n = n$              | 추가 |
-| `mul_comm`, `mul_assoc`, `mul_left_comm` | 가환, 결합, $k(mn) = m(kn)$  | 추가 |
-| `mul_add`, `add_mul`    | $k(m + n) = km + kn$, $(k + m)n = kn + mn$    | 추가 |
+| 정리                                   | 명제                                              | 상태   |
+| -------------------------------------- | ------------------------------------------------- | ------ |
+| `add_zero`, `mul_zero`                 | 공리                                              | 기존   |
+| `zero_add`, `add_comm`, `add_assoc`    | 정리                                              | 기존   |
+| `add_right_comm`                       | $(k + m) + n = (k + n) + m$                       | 추가됨 |
+| `succ_eq_add_one`                      | $S(n) = n + 1$                                    | 추가됨 |
+| `zero_mul`, `succ_mul`                 | $0 \cdot n = 0$, $S(m) \cdot n = m \cdot n + n$   | 추가됨 |
+| `mul_one`, `one_mul`                   | $n \cdot 1 = n$, $1 \cdot n = n$                  | 추가됨 |
+| `mul_comm`, `mul_assoc`                | $m n = n m$, $(k m) n = k (m n)$                  | 추가됨 |
+| `mul_right_comm`                       | $(k m) n = (k n) m$                               | 추가됨 |
+| `mul_add`, `add_mul`                   | $k(m + n) = km + kn$, $(k + m)n = kn + mn$        | 추가됨 |
 
-**크기 제한.** 재구성 도출의 크기는 다항식의 크기와 계수에 비례하여 커진다. 다음 제한을 넘으면 재구성하지 않고 `TacticError`를 일으킨다. 제한은 모듈 상수로 둔다.
+`succ_mul`은 `mul_comm`의 증명에 쓰이는 보조 정리이다.
 
-| 항목                       | 기본 제한 |
-| -------------------------- | --------- |
-| 한 변의 정규형의 단항식 수 | 64        |
-| 계수의 최댓값              | 64        |
-| 단항식의 차수              | 8         |
+**크기 제한.** 정규화의 각 단계가 다항식 전체를 다시 기술하므로, 인증서의 크기는 단위 단항식 수에 대해 대략 세제곱으로 커진다. 정규화기는 덧셈·곱셈을 계산하기 전에 결과의 크기를 예측하여, 다음 제한을 넘으면 재구성하지 않고 `TacticError`를 일으킨다. 제한은 `axiomweave.language.ring`의 모듈 상수이다.
+
+| 항목                                                     | 기본 제한 |
+| -------------------------------------------------------- | --------- |
+| 단위 단항식 수 (계수의 합. 중간 결과 포함)               | 40        |
+| 단항식의 차수                                            | 8         |
+
+- 참고 측정 (비규범): $(m+n)^5$ (32개)은 약 1.5초, $(m+n)^6$ (64개)은 약 10초가 걸린다.
 
 ### 5.6. 예제
 

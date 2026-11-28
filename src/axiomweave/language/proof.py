@@ -679,6 +679,32 @@ class ProofContext:
         )
         self.apply(schema)
 
+    # --- semiring identities (interop-spec §5.3) ----------------------------------------
+
+    def ring(self) -> None:
+        """Close a goal `t = u` over Nat that is a polynomial identity."""
+        goal = self._current()
+        t, u = self._sides(goal.target, "ring")
+        self.exact(self._ring(t, u))
+
+    def ring_eq(self, t: Term, u: Term) -> Fact:
+        """t = u for a polynomial identity over Nat."""
+        t, u = self._term(t), self._term(u)
+        self._check_free(t.free_vars() | u.free_vars(), self._current(), "ring_eq")
+        return self._ring(t, u)
+
+    def _ring(self, t: Term, u: Term) -> Fact:
+        from axiomweave.backends.symbolic import check_identity
+        from axiomweave.language.ring import NAT, prove_equal
+
+        for side in (t, u):
+            if side.sort.name != NAT:
+                raise TacticError(f"ring works on terms of sort Nat, got {side} : {side.sort}")
+        check = check_identity(t, u)
+        if not check.identity:
+            raise TacticError(f"ring: not a polynomial identity: lhs - rhs = {check.difference}")
+        return prove_equal(self, t, u)
+
     # --- counterexample search (interop-spec §4.2) -------------------------------------
 
     def counterexample(self, using: Sequence[object] = (), timeout_ms: int = 5000) -> Any:

@@ -90,6 +90,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "sympy" },
     { name = "z3-solver" },
 ]
 
@@ -107,6 +108,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "sympy" },
     { name = "z3-solver" },
 ]
 
