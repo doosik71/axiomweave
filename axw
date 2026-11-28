@@ -1,0 +1,13 @@
+#!/bin/sh
+# Run the AxiomWeave CLI without typing "uv run" (Linux / macOS).
+# Usage: ./axw check examples/logic/implication.py
+# Works from any directory; relative paths are resolved from the current directory.
+set -e
+
+if ! command -v uv >/dev/null 2>&1; then
+    echo "axw: uv is not installed or not on PATH. See https://docs.astral.sh/uv/" >&2
+    exit 1
+fi
+
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec uv run --quiet --project "$project_dir" axw "$@"

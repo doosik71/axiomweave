@@ -379,6 +379,13 @@ uv run axw verify proof.axwp                     # 사용자 코드 없이 인�
 uv run axw verify proof.axwp --allow NAME=HASH   # 표준 외 공리를 해시와 함께 허용
 ```
 
+저장소 루트의 래퍼 스크립트로 `uv run` 없이 실행할 수 있다. 래퍼는 어느 디렉터리에서 호출해도 이 프로젝트 환경을 사용하며, 상대 경로는 현재 디렉터리 기준이다.
+
+```bash
+axw.bat check examples\logic\implication.py   # Windows (cmd, PowerShell)
+./axw check examples/logic/implication.py      # Linux / macOS
+```
+
 인증서(`.axwp`)는 `thy.check()` 후 `thy.export(path)`로 만든다. 형식은 [docs/kernel-spec.md](docs/kernel-spec.md)를 따른다.
 
 다음 명령은 구현 예정이다.
