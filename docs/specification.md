@@ -35,6 +35,7 @@
 | [`docs/logic-spec.md`](logic-spec.md)       | 타입·항 문법, 판단(Judgment), 추론 규칙, 공리 체계       | 초안   |
 | [`docs/kernel-spec.md`](kernel-spec.md)     | 증명 객체 및 인증서 형식, 검증 알고리즘, 환경, 신뢰 기반 | 초안   |
 | [`docs/language-spec.md`](language-spec.md) | Python DSL 표면 문법, Elaboration, 전술 인터페이스       | 초안   |
+| [`docs/interop-spec.md`](interop-spec.md)   | 외부 시스템 연계: Lean 4 내보내기와 교차 검증            | 개정안 |
 | [`docs/proposal.md`](proposal.md)           | 개발 배경과 장기 목표 (비규범적)                         | 작성됨 |
 | [`README.md`](../README.md)                 | 프로젝트 소개 및 개발 환경 (비규범적)                    | 작성됨 |
 
@@ -44,7 +45,7 @@
 
 1. `logic-spec.md`, `kernel-spec.md` — 건전성(Soundness)에 직접 관련된 규칙
 2. `specification.md` — 공통 용어와 설계 결정
-3. `language-spec.md` — 사용자 표면 문법
+3. `language-spec.md` — 사용자 표면 문법, `interop-spec.md` — 외부 시스템 연계 (둘 다 비신뢰 계층)
 4. `README.md`, `proposal.md` — 배경 및 목표 설명
 
 하위 명세가 이 문서의 설계 결정과 다른 내용을 도입하려면 이 문서를 먼저 개정해야 한다.
