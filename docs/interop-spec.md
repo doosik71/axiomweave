@@ -1,6 +1,6 @@
 # AxiomWeave 상호운용 명세 (Interoperability Specification)
 
-> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`) · §4 확정 · 구현됨 (`axiomweave.backends.smt`, `ctx.counterexample`) · §5 확정 · 구현됨 (`ctx.ring`, `axiomweave.language.ring`, `axiomweave.backends.symbolic`)  
+> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`), §3.9 개정안 검토 대기 · §4 확정 · 구현됨 (`axiomweave.backends.smt`, `ctx.counterexample`) · §5 확정 · 구현됨 (`ctx.ring`, `axiomweave.language.ring`, `axiomweave.backends.symbolic`)  
 > 상위 문서: [specification.md](specification.md). 이 문서는 AxiomWeave와 외부 정리 증명 시스템·도구 사이의 변환을 정의한다. 첫 대상은 검증된 인증서를 Lean 4 소스로 내보내는 교차 검증(§3)이고, 다음은 SMT 솔버로 증명할 수 없는 목표의 반례를 찾는 것(§4)과 SymPy로 판정한 다항식 등식을 증명으로 재구성하는 것(§5)이다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위와 원칙
@@ -155,7 +155,7 @@ set_option autoImplicit false
 
 - 교차 검증 결과는 인증서에 기록하지 않는다.
 - 테스트는 `lean`이 설치된 환경에서만 Lean 검사를 실행하고, 그렇지 않으면 생성 결과의 구조만 검사한다.
-- **검증 현황:** v0.1 구현은 Lean이 설치되지 않은 환경에서 작성되었다. 생성 텍스트, 특히 §3.6의 고정 증명 항은 아직 Lean으로 검사되지 않았다. Lean 4 환경에서 처음 검사할 때 발견되는 불일치는 원칙 4에 따라 변환기 결함으로 조사한다.
+- **검증 현황:** v0.1 구현은 Lean이 설치되지 않은 환경에서 작성되었다. 생성 텍스트, 특히 §3.6의 고정 증명 항은 아직 Lean으로 검사되지 않았다. Lean 4 환경에서 처음 검사할 때 발견되는 불일치는 원칙 4에 따라 조사한다 (§3.9).
 
 ### 3.8. 예제
 
@@ -175,6 +175,57 @@ theorem «demo».«fol».«all_and_left» («P» : «demo».«fol».«U» → Pr
     (fun (x0 : «demo».«fol».«U») =>
       (@And.left («P» x0) («Q» x0) («h_h1» x0))))
 ```
+
+### 3.9. 검증 환경과 첫 교차 검증 (개정안)
+
+> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 §3.7의 Lean 검사를 실제로 수행하기 위한 툴체인, 설치 절차, 검사 대상과 불일치 처리 방법을 정한다. 승인 후 사용자 환경에 Lean을 설치하고 첫 교차 검증을 수행한다.
+
+**툴체인**
+
+| 항목            | 결정                                                                                                  |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| 기준 버전       | Lean 4 안정판 `leanprover/lean4:v4.34.1` (2026-09 배포). 교차 검증 결과는 이 버전에 대해 기록한다.      |
+| 설치 관리자     | `elan`. 사용자 프로필(`~/.elan`)에 설치하며 Python 의존성(`pyproject.toml`)에는 추가하지 않는다.         |
+| 버전 고정 방법  | 저장소에 `lean-toolchain` 파일을 두지 않는다 (저장소 전체가 Lean 프로젝트로 인식되는 것을 피한다). 기준 버전은 이 절과 테스트 상수 `LEAN_TOOLCHAIN`에 기록하고, 테스트는 `lean --version`이 기준 버전과 다르면 경고와 함께 실행한다. |
+| 실행 방법       | `axw export-lean --check`와 테스트는 `PATH`의 `lean`을 그대로 쓴다 (§3.7). Mathlib과 `lake`는 쓰지 않는다. |
+
+**설치 절차** (비규범)
+
+```powershell
+# Windows (PowerShell)
+& "C:\Windows\System32\curl.exe" -sSfL -o elan-init.ps1 https://raw.githubusercontent.com/leanprover/elan/master/elan-init.ps1
+powershell -ExecutionPolicy Bypass -f elan-init.ps1 -NoPrompt $true -DefaultToolchain leanprover/lean4:v4.34.1
+Remove-Item elan-init.ps1
+```
+
+```bash
+# Linux / macOS
+curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+  | sh -s -- -y --default-toolchain leanprover/lean4:v4.34.1
+```
+
+- 설치 스크립트의 옵션 이름은 실행 전에 elan README에서 다시 확인한다. 설치는 사용자 프로필과 `PATH`를 바꾸므로 사용자의 승인을 받아 수행한다.
+
+**검사 대상.** 다음 인증서를 내보내 기준 버전의 `lean`으로 검사한다. Lean이 있는 환경에서는 테스트(`test_lean_accepts_exported_libraries`)가 같은 목록을 검사한다.
+
+| 대상                                              | 확인하는 것                                                     |
+| ------------------------------------------------- | --------------------------------------------------------------- |
+| `examples/logic/implication.py`, `first_order.py`, `equality.py` | L0–L2 증명 노드의 변환 (§3.5)                     |
+| 표준 Theory `propositional`                       | L0 정리 34개                                                    |
+| 표준 Theory `arith`                               | §3.6의 자연수 대응과 표준 공리 증명, 귀납·가환 반환 정리         |
+| `classical.em`을 쓰는 정리를 포함한 인증서        | §3.6의 `Classical.em` 대응                                       |
+| `ctx.ring()`으로 증명한 정리를 포함한 인증서      | 큰 명시적 항(`@Eq.subst`의 긴 사슬)의 검사 시간과 재귀 깊이      |
+
+**불일치 처리.** Lean이 파일을 거부하면 원칙 4(§1)에 따라 원인을 다음 중 하나로 분류하고 기록한다.
+
+| 원인                                  | 조치                                                                                       |
+| ------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 변환기 결함 (이름, 괄호, 인자 순서 등) | 변환기를 고치고 회귀 테스트(구조 검사)를 추가한다. 변환 규칙이 바뀌면 §3.2–3.5를 먼저 개정한다. |
+| §3.6 고정 증명 항이 기준 버전에서 실패  | 고정 텍스트를 고친다. 변환기 버전을 올린다 (§3.6).                                          |
+| Lean 자원 한도 (재귀 깊이, heartbeat) | 파일 머리말에 `set_option maxRecDepth`, `set_option maxHeartbeats` 등을 추가하는 개정을 §3.2에 먼저 한다. |
+| 커널 결함 (커널이 거짓 도출을 수락)    | 커널 변경은 [kernel-spec.md](kernel-spec.md) 개정을 먼저 하고, 실패 사례를 건전성 테스트로 추가한다. |
+
+- 첫 교차 검증의 결과(기준 버전, 날짜, 대상별 성공·실패, 조치)는 §3.7의 검증 현황에 기록한다.
 
 ## 4. SMT 반례 탐색
 
