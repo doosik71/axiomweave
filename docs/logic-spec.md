@@ -480,7 +480,7 @@ $$
 
 ## 12. 단편 L1: 일차 술어 논리
 
-> **상태:** 확정 · 커널 구현됨 (DSL은 [language-spec.md §12](language-spec.md#12-단편-l1-dsl-개정안) 개정안). 이 절은 [specification.md §4.4](specification.md#44-확장-경로)의 L1 단계를 정의한다.
+> **상태:** 확정 · 구현됨 (커널: [kernel-spec.md §13](kernel-spec.md#13-단편-l1-인코딩과-검사), DSL: [language-spec.md §12](language-spec.md#12-단편-l1-dsl)). 이 절은 [specification.md §4.4](specification.md#44-확장-경로)의 L1 단계를 정의한다.
 
 ### 12.1. 범위
 

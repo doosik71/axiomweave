@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE = ROOT / "examples" / "logic" / "implication.py"
+FIRST_ORDER = ROOT / "examples" / "logic" / "first_order.py"
 
 
 def axw(*args: str, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
@@ -48,12 +49,12 @@ def test_check_fails_on_bad_proof(tmp_path: Path) -> None:
     assert "REJECTED" in result.stdout
 
 
-def export_example(tmp_path: Path) -> Path:
+def export_example(tmp_path: Path, example: Path = EXAMPLE) -> Path:
     script = tmp_path / "export.py"
-    target = tmp_path / "implication.axwp"
+    target = tmp_path / f"{example.stem}.axwp"
     script.write_text(
         "import runpy, sys\n"
-        f"module = runpy.run_path({str(EXAMPLE)!r})\n"
+        f"module = runpy.run_path({str(example)!r})\n"
         "thy = module['thy']\n"
         "assert thy.check().ok\n"
         f"thy.export({str(target)!r})\n",
@@ -61,6 +62,19 @@ def export_example(tmp_path: Path) -> Path:
     )
     subprocess.run([sys.executable, str(script)], check=True, cwd=ROOT)
     return target
+
+
+def test_check_first_order_example() -> None:
+    result = axw("check", str(FIRST_ORDER))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "VERIFIED  examples.first_order.ex_not_all_not" in result.stdout
+
+
+def test_verify_first_order_certificate(tmp_path: Path) -> None:
+    certificate = export_example(tmp_path, FIRST_ORDER)
+    result = axw("verify", str(certificate))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ACCEPTED  examples.first_order.U" in result.stdout
 
 
 def test_verify_exported_certificate(tmp_path: Path) -> None:

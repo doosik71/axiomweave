@@ -1,4 +1,4 @@
-"""Theories, declarations, checking and export (language-spec §5, §8).
+"""Theories, declarations, checking and export (language-spec §5, §8, §12).
 
 `Theory.check()` elaborates every proof in declaration order, packs the
 results into a certificate bundle and passes its bytes to the kernel. Only the
@@ -16,7 +16,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
-from axiomweave.core.expressions import Prop
+from axiomweave.core.expressions import Const, Prop, Sort, is_local_name
 from axiomweave.errors import AxwError, AxwTypeError, DeclarationError
 from axiomweave.kernel import (
     STANDARD_AXIOMS,
@@ -124,7 +124,7 @@ class Theorem:
         return f"<Theorem {self.name}: {self.statement} ({self.status.value})>"
 
 
-Declaration = Axiom | Theorem
+Declaration = Axiom | Theorem | Sort | Const
 
 
 class Theory:
@@ -140,26 +140,102 @@ class Theory:
         self.imports = tuple(imports)
         self._declarations: list[Declaration] = []
         self._export: dict[str, Any] | None = None
+        self._fragment = "L0"
 
     def __repr__(self) -> str:
         return f"<Theory {self.name}>"
 
     # --- declarations -----------------------------------------------------------
 
+    def _new_name(self, short: str) -> str:
+        name = f"{self.name}.{short}"
+        if not _THEORY_NAME.fullmatch(name):
+            raise DeclarationError(f"invalid declaration name {name!r}")
+        if any(d.name == name for d in self._declarations):
+            raise DeclarationError(f"{name} is already declared")
+        return name
+
     def _statement(self, function: Callable[[], Prop]) -> tuple[str, Prop]:
         if not callable(function):
             raise DeclarationError("a declaration decorator expects a function")
         if inspect.signature(function).parameters:
             raise DeclarationError(f"{function.__name__} must not take parameters in v0.1")
-        name = f"{self.name}.{function.__name__}"
-        if not _THEORY_NAME.fullmatch(name):
-            raise DeclarationError(f"invalid declaration name {name!r}")
-        if any(d.name == name for d in self._declarations):
-            raise DeclarationError(f"{name} is already declared")
+        name = self._new_name(function.__name__)
         statement = function()
         if not isinstance(statement, Prop):
             raise DeclarationError(f"{name} must return a Prop, got {type(statement).__name__}")
+        self._check_statement(name, statement)
         return name, statement
+
+    def _visible(self) -> list["Theory"]:
+        """This theory and everything it imports, transitively."""
+        order: list[Theory] = []
+        seen: set[int] = set()
+
+        def visit(theory: Theory) -> None:
+            if id(theory) in seen:
+                return
+            seen.add(id(theory))
+            for imported in theory.imports:
+                visit(imported)
+            order.append(theory)
+
+        visit(self)
+        return order
+
+    def _require_visible(self, handle: Sort | Const, where: str) -> None:
+        if not any(handle.theory is t for t in self._visible()):
+            raise DeclarationError(
+                f"{where} uses {handle.name}, which is not in the environment of {self.name}; "
+                "import its theory"
+            )
+
+    def _check_statement(self, name: str, statement: Prop) -> None:
+        """Statements are closed, use visible sorts and constants, and give each
+        schematic variable one arity (language-spec §12.3–12.4)."""
+        free = statement.free_vars()
+        if free:
+            names = ", ".join(sorted(n for n, _ in free))
+            raise DeclarationError(f"{name} has free variables: {names}")
+        try:
+            statement.signature()
+        except AxwTypeError as exc:
+            raise DeclarationError(f"{name}: {exc}") from None
+        sorts, consts = statement.symbols()
+        for sort in sorted(sorts, key=lambda h: h.name):
+            self._require_visible(sort, name)
+        for const in sorted(consts, key=lambda h: h.name):
+            self._require_visible(const, name)
+
+    def sort(self, name: str) -> Sort:
+        """Declare a base type (language-spec §12.2)."""
+        if not is_local_name(name):
+            raise DeclarationError(f"invalid sort name {name!r}")
+        handle = Sort(self._new_name(name), name, self)
+        self._declarations.append(handle)
+        return handle
+
+    def const(self, name: str, args: Sequence[Sort], result: object) -> Any:
+        """Declare a function symbol (result is a Sort) or predicate symbol (result is
+        `Prop`). Without arguments the constant itself is returned as a Term or Prop."""
+        if not is_local_name(name):
+            raise DeclarationError(f"invalid constant name {name!r}")
+        arg_sorts = tuple(args)
+        for sort in arg_sorts:
+            if not isinstance(sort, Sort):
+                raise AxwTypeError(f"const argument sorts must be Sort objects, got {sort!r}")
+        if result is Prop:
+            result_sort = None
+        elif isinstance(result, Sort):
+            result_sort = result
+        else:
+            raise AxwTypeError(f"const result must be a Sort or Prop, got {result!r}")
+        full = self._new_name(name)
+        for sort in (*arg_sorts, *([result_sort] if result_sort else [])):
+            self._require_visible(sort, full)
+        handle = Const(full, name, arg_sorts, result_sort, self)
+        self._declarations.append(handle)
+        return handle() if not arg_sorts else handle
 
     def axiom(self, function: Callable[[], Prop]) -> Axiom:
         """Declare an axiom schema; its atoms are schematic variables."""
@@ -190,19 +266,7 @@ class Theory:
 
     def environment(self) -> list[Declaration]:
         """Imported declarations (transitively, each theory once) followed by our own."""
-        order: list[Theory] = []
-        seen: set[int] = set()
-
-        def visit(theory: Theory) -> None:
-            if id(theory) in seen:
-                return
-            seen.add(id(theory))
-            for imported in theory.imports:
-                visit(imported)
-            order.append(theory)
-
-        visit(self)
-        declarations = [d for theory in order for d in theory._declarations]
+        declarations = [d for theory in self._visible() for d in theory._declarations]
         names: set[str] = set()
         for d in declarations:
             if d.name in names:
@@ -225,6 +289,11 @@ class Theory:
         outcome: dict[str, TheoremResult] = {}
 
         for d in declarations:
+            if isinstance(d, Sort | Const):
+                signature_decl = d.to_json()
+                signature_decl["hash"] = declaration_hash(signature_decl)
+                bundle_declarations.append(signature_decl)
+                continue
             if isinstance(d, Axiom):
                 bundle_declarations.append(axiom_json[d.name])
                 hashes[d.name] = axiom_json[d.name]["hash"]
@@ -238,6 +307,7 @@ class Theory:
             hashes[d.name] = decl["hash"]
             claimed_axioms[d.name] = frozenset(decl["axioms"])
 
+        self._fragment = "L1" if any(isinstance(d, Sort) for d in declarations) else "L0"
         bundle = self._bundle(bundle_declarations)
         report = check_bundle(canonical_json(bundle), policy)
         verified: list[dict[str, Any]] = []
@@ -320,7 +390,7 @@ class Theory:
             return unproven()
 
         def resolve(target: object) -> DeclRef:
-            if not isinstance(target, Axiom | Theorem):
+            if not isinstance(target, Axiom | Theorem):  # sorts and constants are not facts
                 raise AxwTypeError(f"thm expects a Theorem or Axiom, got {target!r}")
             index = position.get(id(target))
             if index is None:
@@ -346,7 +416,11 @@ class Theory:
             )
             return TheoremResult(theorem.name, Status.REJECTED, (diagnostic,), None), None
 
-        derivation = ctx.finish()
+        try:
+            derivation = ctx.finish()
+        except AxwError as exc:  # e.g. a term whose variable is not in scope
+            diagnostic = Diagnostic("elaboration", f"{type(exc).__name__}: {exc}")
+            return TheoremResult(theorem.name, Status.REJECTED, (diagnostic,), None), None
         if derivation is None:
             return unproven(
                 Diagnostic("elaboration", "proof ended with open goals", goals=str(ctx))
@@ -368,7 +442,7 @@ class Theory:
             "format": "axwp",
             "format_version": 1,
             "spec_version": "0.1",
-            "fragment": "L0",
+            "fragment": self._fragment,
             "kernel_version": _package_version(),
             "theory": self.name,
             "declarations": declarations,
