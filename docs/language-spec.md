@@ -300,6 +300,7 @@ with ctx.focus():
 | ----------- | ----------------------------------------------------------- |
 | `ctx.goals` | 현재 목표 목록 (각 목표의 문맥과 명제를 읽기 전용으로 제공) |
 | `str(ctx)`  | 목표 목록의 사람이 읽을 수 있는 표시                        |
+| `ctx.counterexample(using=(), timeout_ms=5000)` | 현재 목표의 고전 반례 탐색. 목표와 도출을 바꾸지 않는다 ([interop-spec.md §4](interop-spec.md#4-smt-반례-탐색)) |
 
 `str(ctx)`의 형식은 다음을 권장한다.
 
@@ -358,6 +359,7 @@ Elaboration은 증명 함수의 실행 기록을 [logic-spec.md §8](logic-spec.
 | `DeclarationError` | `AxwError`              | 잘못된 선언, 이름 중복, 증명 중복 등록, 선언 순서 위반 |
 | `TacticError`      | `AxwError`              | 목표 형태 불일치, 가정 이름 중복, 닫히지 않은 `focus`  |
 | `ScopeError`       | `AxwError`              | 범위를 벗어난 `Fact` 사용                              |
+| `BackendUnavailableError` | `AxwError`       | 선택적 외부 도구(Z3 등)가 설치되지 않음                |
 
 진단 정보는 최소한 다음을 포함해야 한다.
 

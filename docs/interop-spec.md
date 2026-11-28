@@ -1,6 +1,6 @@
 # AxiomWeave 상호운용 명세 (Interoperability Specification)
 
-> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`) · §4 개정안 검토 대기  
+> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`) · §4 확정 · 구현됨 (`axiomweave.backends.smt`, `ctx.counterexample`)  
 > 상위 문서: [specification.md](specification.md). 이 문서는 AxiomWeave와 외부 정리 증명 시스템·도구 사이의 변환을 정의한다. 첫 대상은 검증된 인증서를 Lean 4 소스로 내보내는 교차 검증(§3)이고, 다음은 SMT 솔버로 증명할 수 없는 목표의 반례를 찾는 것(§4)이다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위와 원칙
@@ -9,7 +9,7 @@
 | ---------------------------------------------------------- | --------------------------------------------------------------- |
 | 커널이 수락한 인증서(L0–L2, L3 산술)의 Lean 4 소스 변환    | Lean 증명이나 정리를 AxiomWeave로 가져오기 (`EXTERNAL_VERIFIED`) |
 | 변환 결과를 Lean으로 다시 검사하는 교차 검증 절차          | SMT 응답의 증명 재구성, SymPy 연계                              |
-| Z3 반례 탐색 (§4, 개정안)                                  |                                                                 |
+| Z3 반례 탐색 (§4)                                          |                                                                 |
 | 표준 공리의 Lean 대응과 그 증명                            | Mathlib 의존, Lean 외 시스템(Rocq, Isabelle)                    |
 
 다음 원칙은 이 문서의 모든 연계에 적용한다.
@@ -175,9 +175,9 @@ theorem «demo».«fol».«all_and_left» («P» : «demo».«fol».«U» → Pr
       (@And.left («P» x0) («Q» x0) («h_h1» x0))))
 ```
 
-## 4. SMT 반례 탐색 (개정안)
+## 4. SMT 반례 탐색
 
-> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 Z3로 증명할 수 없는 목표를 설명하는 반례 탐색을 정의한다. 탐색 결과는 증명이 아니며, 검증 상태와 인증서에 영향을 주지 않는다 (§1 원칙 1–2).
+> **상태:** 확정 · 구현됨. 이 절은 Z3로 증명할 수 없는 목표를 설명하는 반례 탐색을 정의한다. 탐색 결과는 증명이 아니며, 검증 상태와 인증서에 영향을 주지 않는다 (§1 원칙 1–2).
 
 ### 4.1. 목적과 지위
 
@@ -236,7 +236,9 @@ result = counterexample(prop, using=[...])           # 닫힌 명제 (증명 시
 | 문맥 가정, `using`의 명제                                        | 단언 (assert)                                                       |
 | 목표 $A$                                                         | `Not(A)` 단언                                                       |
 
-**표준 산술의 해석.** 현재 환경의 `arith.Nat`, `arith.zero`, `arith.succ`, `arith.add`, `arith.mul`이 표준 Theory `arith`의 선언(정규 이름과 인자·결과 종이 같음)이면 다음과 같이 해석한다.
+- 목표가 $\forall x{:}S.\,A$로 시작하면, `intro`처럼 앞쪽의 $\forall$ 바인더를 새 자유 변수로 연 뒤 인코딩한다. $\lnot\forall x.\,A$와 새 상수 $c$에 대한 $\lnot A[c/x]$는 충족 가능성이 같으므로 탐색 결과는 바뀌지 않으며, 반례의 증인(witness)이 모델의 상수로 표시된다. 새 이름은 전제와 목표의 자유 변수 이름과 겹치지 않게 고른다.
+
+**표준 산술의 해석.** 정규 이름이 `arith.Nat`인 종은 $\mathbb{N}$으로 해석한다. `arith.zero`, `arith.succ`, `arith.add`, `arith.mul`은 정규 이름과 인자·결과 종이 표준 Theory `arith`의 선언과 같으면 다음과 같이 해석한다. 표준 공리를 쓸 수 있는 환경에서는 커널이 공리의 명제를 이 선언들에 대해 타입 검사하므로, 네 상수는 항상 표준 해석을 받는다.
 
 | 기호                                        | Z3                             |
 | ------------------------------------------- | ------------------------------ |
@@ -244,8 +246,8 @@ result = counterexample(prop, using=[...])           # 닫힌 명제 (증명 시
 | `zero`, `succ(t)`, `add(t, u)`, `mul(t, u)` | `0`, `t + 1`, `t + u`, `t * u` |
 
 - `Nat`의 양화사는 범위를 제한한다: $\forall x{:}\mathrm{Nat}.\,A$는 `ForAll x. x >= 0 → A`, $\exists x{:}\mathrm{Nat}.\,A$는 `Exists x. x >= 0 ∧ A`이다.
-- `Nat` 값을 갖는 상수·변수와, `Nat`을 돌려주는 해석되지 않은 함수의 값에도 0 이상이라는 단언을 더한다.
-- 표준 선언이 아니면 `arith.Nat`도 다른 종처럼 해석되지 않은 종으로 인코딩한다.
+- `Nat`을 돌려주는 해석되지 않은 기호(상수, 함수, 목표의 변수) $g$는 `Int`를 돌려주는 기호 $h$의 절댓값 `If(h ≥ 0, h, -h)`로 인코딩한다. $\mathbb{N}$으로 가는 모든 함수가 이 꼴이므로 모델을 잃지 않으며, 범위를 위한 양화 단언이 필요 없다.
+- 표준 해석을 받지 않는 `arith.*` 상수는 다른 상수처럼 해석되지 않은 기호로 인코딩한다.
 
 ### 4.4. 모델 표시와 결정성
 
@@ -260,7 +262,8 @@ counterexample found (Z3 4.x; premises: context)
 ```
 
 - 해석되지 않은 종의 원소는 `S#i`로 표시한다. `i`는 Z3가 돌려준 원소 순서이다.
-- 함수와 술어는 표시된 원소에 대한 값표로 나타낸다. 인코딩이 만든 보조 기호는 표시하지 않는다.
+- 함수와 술어는 표시된 원소에 대한 값표로 나타낸다. `Nat` 인자를 갖는 함수는 정의역이 무한하므로, 모델의 `Nat` 상수 값과 Z3 해석에 나열된 점에서의 값만 표시한다.
+- 재검산을 하지 못한 모델은 머리줄에 `not re-checked`를 붙인다.
 - 같은 입력과 같은 Z3 버전에 대해 결과가 같도록 Z3의 무작위 시드를 고정한다. 다른 Z3 버전에서는 다른 (그러나 똑같이 유효한) 모델이 나올 수 있다.
 
 ### 4.5. 모델 재검산
@@ -279,18 +282,19 @@ Z3와 인코딩은 비신뢰 계층이다. 따라서 `found`인 모델은 가능
 @thy.proof(even_somewhere)               # ⊢ ∃x:U. Even(x)   (가정 없음)
 def _(ctx):
     print(ctx.counterexample())
-    # counterexample found (...): U = {U#0}, a = U#0, Even(U#0) = false
+    # counterexample found (...): U = {U#0}, Even(U#0) = false
 
 @thy.proof(lem)                          # ⊢ P ∨ ¬P
 def _(ctx):
     print(ctx.counterexample().status)   # none: 고전적으로 참. 증명에는 classical.em이 필요하다.
 
 counterexample(ForAll(n, Eq(add(n, n), n)))   # ∀n:Nat. n + n = n → found: n = 1
+counterexample(ForAll([m, n], Eq(add(m, n), add(n, m))))   # none: ℕ에서 참 (증명에는 귀납이 필요하다)
 ```
 
 ### 4.7. 범위 밖
 
-- CLI 명령(`axw counterexample` 등)과 증명 실패 진단에 반례를 자동으로 붙이는 기능은 이 개정안에 포함하지 않는다.
+- CLI 명령(`axw counterexample` 등)과 증명 실패 진단에 반례를 자동으로 붙이는 기능은 포함하지 않는다.
 - SMT 응답을 증명으로 재구성하는 기능(§5)은 포함하지 않는다.
 
 ## 5. 이후 연계 (비규범)

@@ -90,6 +90,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "z3-solver" },
 ]
 
 [package.metadata]
@@ -106,6 +107,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "z3-solver" },
 ]
 
 [[package]]

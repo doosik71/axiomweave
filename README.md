@@ -10,7 +10,7 @@
 ![Package manager](https://img.shields.io/badge/package%20manager-uv-purple)
 ![Version](https://img.shields.io/badge/target-v0.1.0-lightgrey)
 
-> **개발 상태:** Pre-alpha. 직관주의 명제 논리(L0), 일차 술어 논리(L1), 등식(L2)의 검증 커널(AxiomCore)과 공리적 자연수 산술(L3), Python DSL(`Theory`, 증명 전술, L1의 종·상수·`ForAll`/`Exists`, L2의 `Eq`와 등식 전술), 표준 Theory(`classical`, 직관주의 명제 논리 정리 라이브러리 `propositional`, 페아노 산술 `arith`와 `ctx.induction()`), `axw check`/`axw verify` CLI, Lean 4 내보내기(`axw export-lean`)가 구현되어 있다. 그 밖의 API, CLI 명령, 파일 구조 및 로드맵 항목은 목표 명세이며 구현 또는 배포 완료를 의미하지 않는다.
+> **개발 상태:** Pre-alpha. 직관주의 명제 논리(L0), 일차 술어 논리(L1), 등식(L2)의 검증 커널(AxiomCore)과 공리적 자연수 산술(L3), Python DSL(`Theory`, 증명 전술, L1의 종·상수·`ForAll`/`Exists`, L2의 `Eq`와 등식 전술), 표준 Theory(`classical`, 직관주의 명제 논리 정리 라이브러리 `propositional`, 페아노 산술 `arith`와 `ctx.induction()`), `axw check`/`axw verify` CLI, Lean 4 내보내기(`axw export-lean`), Z3 반례 탐색(`ctx.counterexample()`)이 구현되어 있다. 그 밖의 API, CLI 명령, 파일 구조 및 로드맵 항목은 목표 명세이며 구현 또는 배포 완료를 의미하지 않는다.
 
 ## 1. Overview
 
@@ -452,7 +452,7 @@ uv build
 - [x] **M1 — AxiomCore:** 명제 논리 AST 및 최소 자연 연역 검증 커널
 - [x] **M2 — AxiomWeave v0.1:** Python DSL, 기본 전술, 명제 논리 정리 라이브러리(`classical`, `propositional`) 및 CLI
 - [x] **M3 — Arithmetic:** 타입이 지정된 항, 양화사, 등식, 자연수 및 귀납법 ([logic-spec §12–§14](docs/logic-spec.md#12-단편-l1-일차-술어-논리), 표준 Theory `arith`)
-- [ ] **M4 — Interoperability:** SymPy, SMT, Lean 연계와 검증 가능한 인증서 변환 (Lean 4 내보내기 구현됨, Lean 실행 검사는 미검증. SMT 반례 탐색 명세 개정안 검토 중: [interop-spec](docs/interop-spec.md))
+- [ ] **M4 — Interoperability:** SymPy, SMT, Lean 연계와 검증 가능한 인증서 변환 (Lean 4 내보내기 구현됨, Lean 실행 검사는 미검증. Z3 반례 탐색 구현됨: [interop-spec](docs/interop-spec.md))
 - [ ] **M5 — AxiomAI:** 정리 검색, 자동 증명 탐색 및 벤치마크
 - [ ] **M6 — Tooling:** Jupyter, IDE 및 증명 지식 그래프
 - [ ] **Long-term:** 고차 논리, 의존 타입 및 고급 수학 라이브러리 연구

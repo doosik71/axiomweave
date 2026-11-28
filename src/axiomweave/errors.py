@@ -1,4 +1,4 @@
-"""Exceptions raised by the AxiomWeave DSL (language-spec §9)."""
+"""Exceptions raised by the AxiomWeave DSL (language-spec §9, interop-spec §4.2)."""
 
 
 class AxwError(Exception):
@@ -19,3 +19,7 @@ class TacticError(AxwError):
 
 class ScopeError(AxwError):
     """A `Fact` is used outside the hypotheses it depends on."""
+
+
+class BackendUnavailableError(AxwError):
+    """An optional external tool (such as Z3) is not installed (interop-spec §4.2)."""

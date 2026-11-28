@@ -21,7 +21,7 @@ symbolic = ["sympy"]
 smt = ["z3-solver"]
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "mypy"]
+dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "mypy", "z3-solver"]
 
 [tool.ruff]
 line-length = 100

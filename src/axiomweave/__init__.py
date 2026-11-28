@@ -22,7 +22,14 @@ from axiomweave.core.expressions import (
     Truth,
     Var,
 )
-from axiomweave.errors import AxwError, AxwTypeError, DeclarationError, ScopeError, TacticError
+from axiomweave.errors import (
+    AxwError,
+    AxwTypeError,
+    BackendUnavailableError,
+    DeclarationError,
+    ScopeError,
+    TacticError,
+)
 from axiomweave.kernel import STANDARD_AXIOMS
 from axiomweave.language.proof import Fact, GoalView, ProofContext
 from axiomweave.language.theory import (
@@ -41,6 +48,7 @@ __all__ = [
     "Axiom",
     "AxwError",
     "AxwTypeError",
+    "BackendUnavailableError",
     "CheckReport",
     "Const",
     "DeclarationError",

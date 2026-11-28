@@ -679,6 +679,26 @@ class ProofContext:
         )
         self.apply(schema)
 
+    # --- counterexample search (interop-spec §4.2) -------------------------------------
+
+    def counterexample(self, using: Sequence[object] = (), timeout_ms: int = 5000) -> Any:
+        """Search a classical model where the current goal's hypotheses and `using`
+        hold and its target fails. Advisory only: goals and derivations are unchanged."""
+        from axiomweave.backends.smt import counterexample
+
+        goal = self._current()
+        premises: list[Prop] = []
+        for item in using:
+            if isinstance(item, Fact):
+                self._in_scope(item, goal)
+                premises.append(item.prop)
+            else:
+                prop = self._prop(item)
+                self._check_free(prop.free_vars(), goal, "counterexample premise")
+                premises.append(prop)
+        view = GoalView(goal.context, goal.target, goal.variables)
+        return counterexample(view, premises, timeout_ms)
+
     def thm(self, decl: object, subst: Mapping[object, object] | None = None) -> Fact:
         if isinstance(decl, str):
             raise AxwTypeError(f"thm expects a Theorem or Axiom handle, got {decl!r}")
