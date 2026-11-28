@@ -1,6 +1,6 @@
 # AxiomWeave 상호운용 명세 (Interoperability Specification)
 
-> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`), §3.9 개정안 검토 대기 · §4 확정 · 구현됨 (`axiomweave.backends.smt`, `ctx.counterexample`) · §5 확정 · 구현됨 (`ctx.ring`, `axiomweave.language.ring`, `axiomweave.backends.symbolic`)  
+> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`), Lean 4.34.1로 교차 검증됨 (§3.7) · §4 확정 · 구현됨 (`axiomweave.backends.smt`, `ctx.counterexample`) · §5 확정 · 구현됨 (`ctx.ring`, `axiomweave.language.ring`, `axiomweave.backends.symbolic`)  
 > 상위 문서: [specification.md](specification.md). 이 문서는 AxiomWeave와 외부 정리 증명 시스템·도구 사이의 변환을 정의한다. 첫 대상은 검증된 인증서를 Lean 4 소스로 내보내는 교차 검증(§3)이고, 다음은 SMT 솔버로 증명할 수 없는 목표의 반례를 찾는 것(§4)과 SymPy로 판정한 다항식 등식을 증명으로 재구성하는 것(§5)이다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위와 원칙
@@ -155,7 +155,17 @@ set_option autoImplicit false
 
 - 교차 검증 결과는 인증서에 기록하지 않는다.
 - 테스트는 `lean`이 설치된 환경에서만 Lean 검사를 실행하고, 그렇지 않으면 생성 결과의 구조만 검사한다.
-- **검증 현황:** v0.1 구현은 Lean이 설치되지 않은 환경에서 작성되었다. 생성 텍스트, 특히 §3.6의 고정 증명 항은 아직 Lean으로 검사되지 않았다. Lean 4 환경에서 처음 검사할 때 발견되는 불일치는 원칙 4에 따라 조사한다 (§3.9).
+- **검증 현황:** 2026-11-28, `leanprover/lean4:v4.34.1`(Windows x86_64)로 §3.9의 대상 7개를 모두 검사하였다. 모든 파일이 오류와 경고 없이 통과했으며 (각 약 1–1.5초), 변환기와 §3.6의 고정 증명 항은 바꿀 필요가 없었다.
+
+  | 대상 | 결과 |
+  | ---- | ---- |
+  | `implication`, `first_order`, `equality` 예제 | 통과 |
+  | `propositional` (정리 34개) | 통과 |
+  | `arith` (표준 공리 7개를 Lean `Nat`으로 증명, 정리 15개) | 통과 |
+  | `classical` (`Classical.em` 대응, `dne`, `peirce`) | 통과 |
+  | `ctx.ring()`으로 증명한 $(m+n)^2$ 전개 | 통과 |
+
+  음성 대조로, 증명 단계·정리 명제·`arith.add`의 정의를 일부러 바꾼 파일은 Lean이 모두 거부함을 확인하였다. Lean이 설치된 환경에서는 테스트가 같은 대상과 음성 대조를 검사한다.
 
 ### 3.8. 예제
 
@@ -176,9 +186,9 @@ theorem «demo».«fol».«all_and_left» («P» : «demo».«fol».«U» → Pr
       (@And.left («P» x0) («Q» x0) («h_h1» x0))))
 ```
 
-### 3.9. 검증 환경과 첫 교차 검증 (개정안)
+### 3.9. 검증 환경과 첫 교차 검증
 
-> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 §3.7의 Lean 검사를 실제로 수행하기 위한 툴체인, 설치 절차, 검사 대상과 불일치 처리 방법을 정한다. 승인 후 사용자 환경에 Lean을 설치하고 첫 교차 검증을 수행한다.
+> **상태:** 확정 · 수행됨 (결과: §3.7 검증 현황). 이 절은 §3.7의 Lean 검사를 실제로 수행하기 위한 툴체인, 설치 절차, 검사 대상과 불일치 처리 방법을 정한다.
 
 **툴체인**
 
@@ -194,7 +204,7 @@ theorem «demo».«fol».«all_and_left» («P» : «demo».«fol».«U» → Pr
 ```powershell
 # Windows (PowerShell)
 & "C:\Windows\System32\curl.exe" -sSfL -o elan-init.ps1 https://raw.githubusercontent.com/leanprover/elan/master/elan-init.ps1
-powershell -ExecutionPolicy Bypass -f elan-init.ps1 -NoPrompt $true -DefaultToolchain leanprover/lean4:v4.34.1
+powershell -ExecutionPolicy Bypass -Command "& .\elan-init.ps1 -NoPrompt `$true -DefaultToolchain 'leanprover/lean4:v4.34.1'"
 Remove-Item elan-init.ps1
 ```
 
@@ -204,7 +214,8 @@ curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh
   | sh -s -- -y --default-toolchain leanprover/lean4:v4.34.1
 ```
 
-- 설치 스크립트의 옵션 이름은 실행 전에 elan README에서 다시 확인한다. 설치는 사용자 프로필과 `PATH`를 바꾸므로 사용자의 승인을 받아 수행한다.
+- `elan-init.ps1`의 `-NoPrompt`는 `[bool]` 매개변수이므로 `-File`로 실행하면 문자열이 전달되어 실패한다. 위와 같이 `-Command`로 실행한다.
+- 설치는 사용자 프로필과 사용자 `PATH`(`~/.elan/bin`)를 바꾸므로 사용자의 승인을 받아 수행한다. 이미 열린 터미널에는 새 `PATH`가 반영되지 않는다.
 
 **검사 대상.** 다음 인증서를 내보내 기준 버전의 `lean`으로 검사한다. Lean이 있는 환경에서는 테스트(`test_lean_accepts_exported_libraries`)가 같은 목록을 검사한다.
 

@@ -4,9 +4,11 @@ Lean itself runs only where `lean` is installed; otherwise these tests check the
 structure of the generated text.
 """
 
+import runpy
 import shutil
 import subprocess
 import tempfile
+import warnings
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,7 @@ from axiomweave.backends.lean import ExportError, export_lean
 from axiomweave.kernel import STANDARD_AXIOMS
 from axiomweave.kernel.axioms import CLASSICAL_EM
 from axiomweave.lib.arithmetic.peano import arith
+from axiomweave.lib.logic.classical import classical
 from axiomweave.lib.logic.propositional import propositional
 from tests.helpers import (
     all_i,
@@ -186,17 +189,86 @@ def test_rejected_declarations_are_skipped() -> None:
     assert "bad" not in result.text
 
 
-@pytest.mark.skipif(shutil.which("lean") is None, reason="lean is not installed")
-def test_lean_accepts_exported_libraries(tmp_path: Path) -> None:
-    certificates = {
-        "arith": certificate(arith),
-        "propositional": certificate(propositional),
-        "imp_trans": encode(bundle(IMP_TRANS)),
-    }
-    for name, data in certificates.items():
-        path = tmp_path / f"{name}.lean"
-        path.write_text(export_lean(data, STANDARD_AXIOMS).text, encoding="utf-8")
-        lean = shutil.which("lean")
-        assert lean is not None
-        result = subprocess.run([lean, str(path)], capture_output=True, text=True, check=False)
-        assert result.returncode == 0, result.stdout + result.stderr
+# --- Lean cross-check (interop-spec §3.9); runs only where `lean` is installed --------
+
+LEAN_TOOLCHAIN = "leanprover/lean4:v4.34.1"
+ROOT = Path(__file__).resolve().parents[2]
+needs_lean = pytest.mark.skipif(shutil.which("lean") is None, reason="lean is not installed")
+
+
+def run_lean(path: Path) -> subprocess.CompletedProcess[str]:
+    lean = shutil.which("lean")
+    assert lean is not None
+    version = subprocess.run([lean, "--version"], capture_output=True, text=True, check=False)
+    expected = LEAN_TOOLCHAIN.rsplit(":v", 1)[1]
+    if f"version {expected}," not in version.stdout:
+        warnings.warn(f"Lean {version.stdout.strip()} differs from {LEAN_TOOLCHAIN}", stacklevel=2)
+    return subprocess.run(
+        [lean, str(path)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+
+
+def ring_certificate() -> bytes:
+    pytest.importorskip("sympy")
+    from axiomweave import Eq, ForAll, ProofContext, Prop, Var
+    from axiomweave.lib.arithmetic.peano import Nat, add, mul, numeral
+
+    m, n = Var("m", Nat), Var("n", Nat)
+    thy = Theory("demo.ring", imports=[arith])
+
+    @thy.theorem
+    def square() -> Prop:
+        two_mn = mul(numeral(2), mul(m, n))
+        return ForAll([m, n], Eq(mul(add(m, n), add(m, n)), add(add(mul(m, m), two_mn), mul(n, n))))
+
+    @thy.proof(square)
+    def _(ctx: ProofContext) -> None:
+        ctx.intro()
+        ctx.intro()
+        ctx.ring()
+
+    return certificate(thy)
+
+
+TARGETS = {
+    "implication": lambda: certificate(
+        runpy.run_path(str(ROOT / "examples/logic/implication.py"))["thy"]
+    ),
+    "first_order": lambda: certificate(
+        runpy.run_path(str(ROOT / "examples/logic/first_order.py"))["thy"]
+    ),
+    "equality": lambda: certificate(
+        runpy.run_path(str(ROOT / "examples/logic/equality.py"))["thy"]
+    ),
+    "propositional": lambda: certificate(propositional),
+    "arith": lambda: certificate(arith),
+    "classical": lambda: certificate(classical),
+    "ring": ring_certificate,
+}
+
+
+@needs_lean
+@pytest.mark.parametrize("name", list(TARGETS))
+def test_lean_accepts_exported_certificate(name: str, tmp_path: Path) -> None:
+    path = tmp_path / f"{name}.lean"
+    path.write_text(export_lean(TARGETS[name](), STANDARD_AXIOMS).text, encoding="utf-8")
+    result = run_lean(path)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@needs_lean
+def test_lean_rejects_a_tampered_export(tmp_path: Path) -> None:
+    # Guard against a vacuous check: a wrong proof step must fail in Lean.
+    text = export_lean(encode(bundle(IMP_TRANS)), STANDARD_AXIOMS).text
+    tampered = text.replace("(«h_h2» («h_h1» «h_h3»))", "(«h_h1» «h_h3»)")
+    assert tampered != text
+    path = tmp_path / "tampered.lean"
+    path.write_text(tampered, encoding="utf-8")
+    result = run_lean(path)
+    assert result.returncode != 0
+    assert "error" in result.stdout + result.stderr
