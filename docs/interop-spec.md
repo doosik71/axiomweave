@@ -1,6 +1,6 @@
 # AxiomWeave 상호운용 명세 (Interoperability Specification)
 
-> **문서 상태:** 초안(Draft) · 개정안(Proposed) · 검토 대기  
+> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`)  
 > 상위 문서: [specification.md](specification.md). 이 문서는 AxiomWeave와 외부 정리 증명 시스템·도구 사이의 변환을 정의한다. 첫 대상은 검증된 인증서를 Lean 4 소스로 내보내는 교차 검증(§3)이다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위와 원칙
@@ -63,6 +63,7 @@ set_option autoImplicit false
 
 - 모든 이름 성분을 `«…»`로 감싸므로 Lean 예약어(`at`, `fun`, `example` 등)와 충돌하지 않는다.
 - 선언은 루트 이름공간에 둔다. `arith.Nat` 같은 이름은 `«arith».«Nat»`이며 Lean의 `Nat`과 다른 이름이다 (표준 대응은 §3.6에서 정의로 연결한다).
+- 스키마 변수 이름이 `x0`처럼 생성된 이름과 같으면 Lean에서 가려질(shadowing) 수 있다. 이 경우 Lean이 파일을 거부할 수는 있으나 잘못된 증명을 수락하지는 않는다. Lean은 내보낸 명제 자체에 대해 증명을 검사하기 때문이다.
 
 ### 3.4. 명제와 항
 
@@ -129,7 +130,9 @@ set_option autoImplicit false
 | `const arith.zero`, `succ`, `add`, `mul` | `Nat.zero`, `Nat.succ`, `Nat.add`, `Nat.mul`로 정의한 `def` (`abbrev`)              |
 | `arith.*` 공리 7개             | 위 정의 아래에서 Lean 코어로 증명한 `theorem`. 증명 항은 변환기가 정하며, 대상 Lean 버전에서 검사되어야 한다. |
 
-- `arith.*` 공리가 하나라도 쓰이면 `arith.Nat`과 네 상수는 `axiom`이 아니라 위 정의로 내보낸다. 번들의 해당 `sort`/`const` 선언은 이 정의로 대체된다.
+- 수락된 `arith.*` 표준 공리가 번들에 하나라도 있으면 `arith.Nat`과 네 상수는 `axiom`이 아니라 위 정의로 내보낸다. 번들의 해당 `sort`/`const` 선언은 인자·결과 종이 표준과 같을 때만 이 정의로 대체된다.
+- 표준 공리의 명제는 다른 선언과 같이 번들에서 변환하고, 증명 항만 고정 텍스트를 쓴다. 커널이 공리의 해시를 허용 목록과 대조했으므로 명제는 표준과 같다.
+- 선언은 그 이름의 이름공간 안에서 elaboration되므로, 고정 텍스트는 Lean 코어 이름을 `_root_.Nat`, `_root_.Classical.em`처럼 루트에서 지정한다.
 - 표준 공리의 대응은 변환기에 내장된 고정 텍스트이다. 대응 텍스트를 바꾸면 변환기 버전을 올린다.
 - 이 대응이 Lean에서 검사된다는 것은, 표준 공리가 Lean이 정의한 자연수와 고전 논리에서 참이라는 독립적인 근거가 된다.
 
@@ -146,8 +149,11 @@ set_option autoImplicit false
 | 사용법 오류                            | 2         |
 | `--check`를 요청했으나 `lean`이 없음    | 3         |
 
+- 번들 단계는 통과했으나 일부 선언이 거부되면 수락된 선언으로 파일을 쓰고, 거부된 선언을 보고한 뒤 종료 코드 1을 반환한다. 이때 Lean 검사는 실행하지 않는다.
+
 - 교차 검증 결과는 인증서에 기록하지 않는다.
 - 테스트는 `lean`이 설치된 환경에서만 Lean 검사를 실행하고, 그렇지 않으면 생성 결과의 구조만 검사한다.
+- **검증 현황:** v0.1 구현은 Lean이 설치되지 않은 환경에서 작성되었다. 생성 텍스트, 특히 §3.6의 고정 증명 항은 아직 Lean으로 검사되지 않았다. Lean 4 환경에서 처음 검사할 때 발견되는 불일치는 원칙 4에 따라 변환기 결함으로 조사한다.
 
 ### 3.8. 예제
 

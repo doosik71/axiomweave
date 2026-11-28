@@ -115,3 +115,48 @@ def test_verify_rejects_tampered_certificate(tmp_path: Path) -> None:
 def test_verify_allow_option_format(tmp_path: Path) -> None:
     certificate = export_example(tmp_path)
     assert axw("verify", str(certificate), "--allow", "no-equals-sign").returncode == 2
+
+
+def test_export_lean_writes_file(tmp_path: Path) -> None:
+    certificate = export_example(tmp_path)
+    output = tmp_path / "implication.lean"
+    result = axw("export-lean", str(certificate), "-o", str(output))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "exported  4 declarations" in result.stdout
+    assert "theorem «examples».«implication».«imp_trans»" in output.read_text(encoding="utf-8")
+
+
+def test_export_lean_exit_codes(tmp_path: Path) -> None:
+    certificate = export_example(tmp_path)
+    output = tmp_path / "out.lean"
+    assert axw("export-lean", str(certificate)).returncode == 2  # -o is required
+    bad_allow = axw("export-lean", str(certificate), "-o", str(output), "--allow", "x")
+    assert bad_allow.returncode == 2
+
+    bundle = json.loads(certificate.read_text(encoding="utf-8"))
+    bundle["bundle_hash"] = "sha256:" + "0" * 64
+    tampered = tmp_path / "tampered.axwp"
+    tampered.write_text(json.dumps(bundle), encoding="utf-8")
+    rejected = axw("export-lean", str(tampered), "-o", str(output))
+    assert rejected.returncode == 1
+    assert "E_HASH_MISMATCH" in rejected.stdout
+    assert not output.exists()
+
+
+def test_export_lean_check_without_lean(tmp_path: Path) -> None:
+    certificate = export_example(tmp_path)
+    output = tmp_path / "out.lean"
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PATH": str(tmp_path)}
+    result = subprocess.run(
+        [sys.executable, "-m", "axiomweave.cli", "export-lean", str(certificate)]
+        + ["-o", str(output), "--check"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=ROOT,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "lean      skipped" in result.stdout
+    assert output.exists()
