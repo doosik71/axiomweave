@@ -9,6 +9,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from axiomweave import (
+    Eq,
+    Exists,
     ForAll,
     ProofContext,
     Prop,
@@ -235,3 +237,87 @@ def test_search_and_hint_directly() -> None:
     assert Search(100).prove((P, P >> Q), Q) is not None
     assert Search(100).prove((), P | ~P) is None
     assert classical_hint((), P | ~P) == "classically valid; it may need classical.em"
+
+
+# --- first-order rules (ai-spec §6) ------------------------------------------------------
+
+
+def fol_result(build: Callable[..., Prop], **kwargs: object) -> object:
+    thy = Theory("demo.auto.fo")
+    U = thy.sort("U")
+    a = thy.const("a", [], U)
+    f = thy.const("f", [U], U)
+    x, y, z = Var("x", U), Var("y", U), Var("z", U)
+    A, B = Prop.symbol("A", U), Prop.symbol("B", U, U)
+    statement = build(U=U, a=a, f=f, x=x, y=y, z=z, A=A, B=B)
+
+    @thy.theorem
+    def t() -> Prop:
+        return statement
+
+    @thy.proof(t)
+    def _(ctx: ProofContext) -> None:
+        ctx.auto(**kwargs)  # type: ignore[arg-type]
+
+    return thy.check().results[-1]
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda x, y, B, **_: ForAll(x, ForAll(y, B(x, y))) >> ForAll(y, ForAll(x, B(x, y))),
+        lambda x, y, B, **_: Exists(x, ForAll(y, B(x, y))) >> ForAll(y, Exists(x, B(x, y))),
+        lambda x, A, f, a, **_: ForAll(x, A(x)) >> A(f(a)),
+        lambda x, A, **_: ForAll(x, ~A(x)) >> ~Exists(x, A(x)),
+        lambda x, y, z, f, **_: ForAll(
+            [x, y, z], Eq(x, y) >> (Eq(z, y) >> Eq(f(x), f(z)))
+        ),  # symmetry, transitivity and congruence
+        lambda a, f, **_: Eq(f(a), f(a)),
+    ],
+    ids=["all_comm", "ex_all", "instance", "all_not", "eq_closure", "refl"],
+)
+def test_first_order_goals(build: Callable[..., Prop]) -> None:
+    result = fol_result(build)
+    assert result.status is Status.VERIFIED, str(result)  # type: ignore[attr-defined]
+
+
+def test_first_order_failure_is_bounded() -> None:
+    drinker = fol_result(lambda x, y, A, **_: Exists(x, A(x) >> ForAll(y, A(y))))
+    assert drinker.status is Status.REJECTED  # type: ignore[attr-defined]
+    text = message(drinker)
+    assert "auto: no proof found within depth 3 (first-order search is incomplete)" in text
+    assert "false under" not in text and "classically valid" not in text
+
+
+def test_first_order_can_be_turned_off_and_depth_limits_instances() -> None:
+    off = fol_result(lambda x, A, f, a, **_: ForAll(x, A(x)) >> A(f(a)), first_order=False)
+    assert "not provable in intuitionistic propositional logic" in message(off)
+    shallow = fol_result(lambda x, A, f, a, **_: ForAll(x, A(x)) >> A(f(a)), depth=0)
+    assert "within depth 0" in message(shallow)
+    deep = fol_result(lambda x, A, f, a, **_: ForAll(x, A(x)) >> A(f(a)), depth=1)
+    assert deep.status is Status.VERIFIED  # type: ignore[attr-defined]
+    bad = fol_result(lambda x, A, **_: ForAll(x, A(x)) >> ForAll(x, A(x)), depth=-1)
+    assert "AxwTypeError" in message(bad)
+
+
+def test_eigenvariable_names_avoid_used_names() -> None:
+    thy = Theory("demo.auto.names")
+    U = thy.sort("U")
+    x = Var("x", U)
+    A = Prop.symbol("A", U)
+
+    @thy.theorem
+    def t() -> Prop:
+        return ForAll(x, A(x) >> A(x)) & ForAll(x, A(x) >> A(x))
+
+    @thy.proof(t)
+    def _(ctx: ProofContext) -> None:
+        ctx.split()
+        with ctx.focus():
+            ctx.intro("x")  # uses the name x in this proof
+            h = ctx.intro()
+            ctx.exact(h)
+        with ctx.focus():
+            ctx.auto()  # must pick another eigenvariable name
+
+    assert thy.check().ok

@@ -686,15 +686,26 @@ class ProofContext:
 
     # --- propositional automation (ai-spec §3.2) -----------------------------------------
 
-    def auto(self, using: Sequence[Fact] = (), limit: int | None = None) -> None:
-        """Close the current goal by intuitionistic propositional reasoning from the
-        context hypotheses and `using`; other formulas are treated as atoms."""
-        from axiomweave.ai.propositional import DEFAULT_LIMIT, auto
+    def auto(
+        self,
+        using: Sequence[Fact] = (),
+        limit: int | None = None,
+        depth: int | None = None,
+        first_order: bool = True,
+    ) -> None:
+        """Close the current goal from the context hypotheses and `using` by
+        intuitionistic reasoning: complete for propositional goals (ai-spec §3), and
+        with quantifier and equality rules bounded by `depth` (ai-spec §6)."""
+        from axiomweave.ai.propositional import DEFAULT_DEPTH, DEFAULT_LIMIT, auto
 
-        if limit is None:
-            limit = DEFAULT_LIMIT
+        limit = DEFAULT_LIMIT if limit is None else limit
+        depth = DEFAULT_DEPTH if depth is None else depth
         if type(limit) is not int or limit <= 0:
             raise AxwTypeError(f"auto: limit must be a positive int, got {limit!r}")
+        if type(depth) is not int or depth < 0:
+            raise AxwTypeError(f"auto: depth must be a non-negative int, got {depth!r}")
+        if type(first_order) is not bool:
+            raise AxwTypeError(f"auto: first_order must be a bool, got {first_order!r}")
         goal = self._current()
         facts: dict[Prop, Fact] = {}
         for name, prop in goal.context:
@@ -703,7 +714,7 @@ class ProofContext:
             fact = self._fact(item)
             self._in_scope(fact, goal)
             facts.setdefault(fact.prop, fact)
-        auto(self, facts, limit)
+        auto(self, facts, limit, depth, first_order)
 
     # --- theorem search (ai-spec §4.4) -------------------------------------------------
 

@@ -259,7 +259,7 @@ report = thy.check(allowed_axioms=None)
 | `ctx.assumption()`         | $A$                                                 | $\Gamma$에 $A$와 같은 가정이 있으면 가장 최근의 것으로 목표를 닫음                                                 |
 | `ctx.have(A, name=None)`   | 임의의 $B$                                          | 목표를 $\Gamma \vdash A$, $\Gamma, h : A \vdash B$ 두 개로 바꾸고 가정 $h$의 `Fact`를 반환                         |
 | `ctx.search(limit=None)` | 임의의 $A$ | 목표를 바꾸지 않고, 결론이 $A$와 맞는 환경의 정리를 찾아 돌려줌 ([ai-spec.md §4](ai-spec.md#4-정리-검색)) |
-| `ctx.auto(using=(), limit=None)` | 임의의 $A$ | 직관주의 명제 논리로 $\Gamma$와 `using`에서 $A$를 찾아 목표를 닫음 ([ai-spec.md §3](ai-spec.md#3-명제-논리-결정-절차)) |
+| `ctx.auto(using=(), limit=None, depth=None, first_order=True)` | 임의의 $A$ | $\Gamma$와 `using`에서 직관주의 추론으로 $A$를 찾아 목표를 닫음. 명제 부분은 완전, 양화사·등식은 `depth` 안에서 탐색 ([ai-spec.md §3](ai-spec.md#3-명제-논리-결정-절차), [§6](ai-spec.md#6-일차-확장)) |
 
 - 현재 목표의 형태가 표의 조건과 맞지 않으면 `TacticError`를 일으켜야 한다.
 - `apply`는 `f.prop`을 오른쪽으로 펼쳐 결론이 현재 목표와 같아지는 가장 짧은 $n$을 사용한다. 그런 $n$이 없으면 `TacticError`를 일으켜야 한다.

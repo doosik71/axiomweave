@@ -1,6 +1,6 @@
 # AxiomWeave 자동화 명세 (AxiomAI Specification)
 
-> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.ai.propositional`, `ctx.auto`) · §4 확정 · 구현됨 (`axiomweave.ai.search`, `ctx.search`, `axw search`) · §5 확정 · 구현됨 (`axiomweave.bench`, `axw bench`) · §6 개정안 검토 대기  
+> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.ai.propositional`, `ctx.auto`) · §4 확정 · 구현됨 (`axiomweave.ai.search`, `ctx.search`, `axw search`) · §5 확정 · 구현됨 (`axiomweave.bench`, `axw bench`) · §6 확정 · 구현됨 (`ctx.auto(depth, first_order)`)  
 > 상위 문서: [specification.md](specification.md). 이 문서는 증명을 자동으로 찾는 계층(AxiomAI)을 정의한다. 첫 대상은 명제 논리 결정 절차 `ctx.auto()`(§3)이고, 다음은 정리 검색 `ctx.search()`(§4)와 벤치마크 `axw bench`(§5)이다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위와 원칙
@@ -10,7 +10,7 @@
 | 직관주의 명제 논리의 완전한 결정 절차 (§3)             | 전술 탐색 루프, 기계 학습 정책 (§7)                         |
 | 목표에 맞는 정리 검색과 이름 검색 (§4)                  |                                                             |
 | 문제 집합과 측정 도구 (§5)                              |                                                             |
-| `ctx.auto`의 양화사·등식 규칙 (§6, 개정안)              |                                                             |
+| `ctx.auto`의 양화사·등식 규칙 (§6)                      |                                                             |
 | 찾은 증명을 기존 전술로 재생하여 도출을 만드는 방법    | 귀납과 산술 공리를 쓰는 자동화                              |
 
 다음 원칙은 이 문서의 모든 자동화에 적용한다.
@@ -331,7 +331,7 @@ axw bench --check-references               # 문제 집합 자체를 참조 증�
 
 - 표 출력은 문제마다 한 줄(`문제  풀이기별 상태와 시간`)과 범주별 요약이다. JSON은 레코드의 목록이며 각 레코드는 `solver`, `problem`, `category`, `expected`와 §5.4의 항목을 갖는다. `--check-references`의 레코드는 풀이기 이름이 `reference`이다.
 
-**기준 결과** (비규범, 2026-11-28 측정, 60문제 × 풀이기 4개, 총 11.7초)
+**기준 결과** (비규범, 2026-11-28 측정, 60문제 × 풀이기 4개, 총 11.7초. §6 구현 전)
 
 | 범주 (provable 수) | `auto` | `search` | `ring` | `portfolio` |
 | ------------------ | ------ | -------- | ------ | ----------- |
@@ -340,7 +340,8 @@ axw bench --check-references               # 문제 집합 자체를 참조 증�
 | `arithmetic` (18)    | 0  | 2 | 13 | 13 |
 
 - `unprovable` 문제 9개는 어느 풀이기로도 `VERIFIED`가 되지 않았다 (경보 없음).
-- 일차 문제는 양화사의 도입·제거가 필요하므로 기준 풀이기로는 풀리지 않는다. 산술의 남은 5문제는 귀납이나 단사성이 필요하다. 일차 문제는 §6의 첫 평가 대상이고, 산술의 남은 문제는 전술 탐색(§7)의 평가 대상이다.
+- §6 구현 후 `auto`와 `portfolio`는 `first_order` 13/13을 푼다 (아래 §6.6).
+- 일차 문제는 양화사의 도입·제거가 필요하므로 §6 이전의 기준 풀이기로는 풀리지 않았다. 산술의 남은 5문제는 귀납이나 단사성이 필요하다. 일차 문제는 §6의 첫 평가 대상이고, 산술의 남은 문제는 전술 탐색(§7)의 평가 대상이다.
 
 
 ### 5.6. 범위 밖
@@ -348,9 +349,9 @@ axw bench --check-references               # 문제 집합 자체를 참조 증�
 - 외부 벤치마크 형식(TPTP, ILTP) 가져오기, 강제 시간 제한, 병렬 실행, 결과의 시간 추이 저장은 포함하지 않는다.
 - 기계 학습 정책과 전술 탐색 루프는 §7에서 다룬다.
 
-## 6. 일차 확장 (개정안)
+## 6. 일차 확장
 
-> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 `ctx.auto()`(§3)에 양화사 규칙과 등식 규칙을 더한다. 벤치마크(§5)의 `first_order` 범주(기준 결과 0/13)가 첫 평가 대상이다.
+> **상태:** 확정 · 구현됨. 이 절은 `ctx.auto()`(§3)에 양화사 규칙과 등식 규칙을 더한다. 벤치마크(§5)의 `first_order` 범주(기준 결과 0/13)가 첫 평가 대상이다.
 
 ### 6.1. 지위
 
@@ -398,7 +399,8 @@ ctx.auto(first_order=False)        # §3의 명제 골격 탐색만
 | L$\to$Q       | $Q \to D \in \Gamma$, $Q$가 양화된 명제     | $\Gamma' \Rightarrow Q$ 그리고 $\Gamma', D \Rightarrow C$ ($\Gamma'$는 그 함의를 뺀 나머지) |
 
 - 고유 변수의 이름은 현재 증명에서 이미 쓴 변수 이름과 시퀀트의 이름을 피해 정한다. 재생은 그 이름을 `ctx.intro(name)`, `ctx.obtain(f, (name, None))`에 넘긴다.
-- L$\to$원자(§3.3)는 원자뿐 아니라 $\Gamma$에 있는 임의의 명제 $P$에 대해 $P \to B$를 $B$로 바꾼다 (전건 긍정은 항상 건전하다).
+- L$\to$원자(§3.3)는 원자뿐 아니라 $\Gamma$에 있는 임의의 명제 $P$에 대해 $P \to B$를 $B$로 바꾼다 (전건 긍정은 항상 건전하다). 이 일반화는 명제 탐색에도 적용되며, $P \in \Gamma$이면 이 규칙은 가역이고 종료성을 해치지 않는다.
+- `∀`L로 얻은 인스턴스가 이미 $\Gamma$에 있으면 그 항은 건너뛴다. 실패한 시퀀트의 기억(§3.3)은 남은 인스턴스화 횟수까지 포함하여 구분한다.
 - $T_S$가 비어 있으면 $\exists$R과 $\forall$L은 그 종에 대해 적용되지 않는다. 이는 종이 비어 있을 수 있다는 논리의 가정과 맞는다 ([logic-spec.md §12](logic-spec.md#12-단편-l1-일차-술어-논리)).
 - 탐색은 `depth` 1, 2, …로 반복 심화(iterative deepening)하여, 인스턴스화가 적은 증명을 먼저 찾는다.
 
@@ -427,6 +429,8 @@ ctx.auto(first_order=False)        # §3의 명제 골격 탐색만
 - 벤치마크 `first_order` 범주의 provable 13문제 가운데 12문제 이상을 `auto`가 풀어야 한다.
 - `unprovable` 문제(술꾼 역설, $\lnot\forall \to \exists\lnot$)는 어떤 경우에도 `VERIFIED`가 되어서는 안 된다 (커널이 보장하며, 벤치마크 경보로 확인한다).
 - 기존 `propositional` 범주의 결과(20/20)와 시간이 나빠지지 않아야 한다.
+
+**결과** (비규범, 2026-11-28): `auto`가 `first_order` 13/13을 풀고 (각 0.01초 이하), 술꾼 역설과 $\lnot\forall \to \exists\lnot$은 `no proof found within depth 3`으로 실패한다 (경보 없음). `propositional`은 20/20이며 PHP(5, 4)의 단계 수와 시간(67 656단계, 0.8초)은 바뀌지 않았다. 전체 벤치마크는 9.8초이다.
 
 ### 6.7. 범위 밖
 
