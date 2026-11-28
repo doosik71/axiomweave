@@ -786,7 +786,7 @@ $$
 
 ## 13. 단편 L2: 등식
 
-> **상태:** 확정 · 커널 구현됨 ([kernel-spec.md §14](kernel-spec.md#14-단편-l2-인코딩과-검사)), DSL은 [language-spec.md §13](language-spec.md#13-단편-l2-dsl-개정안) 개정안. 이 절은 [specification.md §4.4](specification.md#44-확장-경로)의 L2 단계를 정의한다. 이 절에서 정하지 않은 사항은 §12의 L1을 따른다.
+> **상태:** 확정 · 구현됨 (커널: [kernel-spec.md §14](kernel-spec.md#14-단편-l2-인코딩과-검사), DSL: [language-spec.md §13](language-spec.md#13-단편-l2-dsl)). 이 절은 [specification.md §4.4](specification.md#44-확장-경로)의 L2 단계를 정의한다. 이 절에서 정하지 않은 사항은 §12의 L1을 따른다.
 
 ### 13.1. 범위
 

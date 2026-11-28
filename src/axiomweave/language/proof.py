@@ -1,4 +1,5 @@
-"""Proof context: goal tactics, forward rules and derivation building (language-spec §6–7, §12.5–12.6).
+"""Proof context: goal tactics, forward rules and derivation building
+(language-spec §6–7, §12.5–12.6, §13.3–13.4).
 
 Tactics build a kernel derivation tree (kernel-spec §5, §13.5) whose open
 positions are `_Goal` objects. Propositions and terms stay named while the
@@ -12,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from axiomweave.core.expressions import (
+    Eq,
     Falsehood,
     PredicateSymbol,
     Prop,
@@ -526,6 +528,137 @@ class ProofContext:
             prop = prop.body.subst_var(prop.var, t)
             derivation = {"rule": "all_e", "of": derivation, "term": t}
         return Fact(prop, derivation, scope)
+
+    # --- equality (language-spec §13.3–13.4) --------------------------------------
+
+    @staticmethod
+    def _sides(prop: Prop, what: str) -> tuple[Term, Term]:
+        if prop.tag != "eq":
+            raise TacticError(f"{what} needs an equality, got {prop}")
+        return prop.sides
+
+    def _motive_var(self, sort: Any, *things: Prop | Term) -> Term:
+        """A variable for an `eq_e` motive whose name occurs in none of `things`."""
+        taken = set(self._used_vars)
+        for thing in things:
+            taken |= thing.var_names() if isinstance(thing, Prop) else set(thing._names or ())
+        return Var(_fresh_name("z", taken), sort)
+
+    def _symm_derivation(self, derivation: Any, t: Term, u: Term) -> dict[str, Any]:
+        """u = t from a derivation of t = u (logic-spec §13.5)."""
+        z = self._motive_var(t.sort, t, u)
+        return {
+            "rule": "eq_e",
+            "eq": derivation,
+            "motive": _Binder(z, Eq(z, t)),
+            "of": {"rule": "eq_refl", "term": t},
+        }
+
+    def rfl(self) -> None:
+        """Close a goal `t = t`."""
+        goal = self._current()
+        t, u = self._sides(goal.target, "rfl")
+        if t != u:
+            raise TacticError(f"rfl: {t} and {u} are different terms")
+        goal.solution = {"rule": "eq_refl", "term": t}
+        self._replace([])
+
+    def rewrite(self, fact: Fact, reverse: bool = False) -> None:
+        """With `fact : t = u`, replace the free occurrences of t in the goal by u
+        (or of u by t when `reverse` is true)."""
+        goal = self._current()
+        fact = self._fact(fact)
+        self._in_scope(fact, goal)
+        t, u = self._sides(fact.prop, "rewrite")
+        source, target_term = (u, t) if reverse else (t, u)
+        if not goal.target.contains(source):
+            raise TacticError(f"rewrite: {source} does not occur in {goal.target}")
+        z = self._motive_var(t.sort, goal.target, t, u)
+        motive = goal.target.abstract(source, z)
+        sub = goal.with_target(motive.subst_var(z, target_term))
+        equation = fact._derivation if reverse else self._symm_derivation(fact._derivation, t, u)
+        goal.solution = {"rule": "eq_e", "eq": equation, "motive": _Binder(z, motive), "of": sub}
+        self._replace([sub])
+
+    def refl(self, term: Term) -> Fact:
+        """t = t."""
+        t = self._term(term)
+        return Fact(Eq(t, t), {"rule": "eq_refl", "term": t}, self._scope_of(t.free_vars()))
+
+    def symm(self, f: Fact) -> Fact:
+        """From t = u derive u = t."""
+        f = self._fact(f)
+        t, u = self._sides(f.prop, "symm")
+        return Fact(Eq(u, t), self._symm_derivation(f._derivation, t, u), f._scope)
+
+    def trans(self, f: Fact, g: Fact) -> Fact:
+        """From t = u and u = v derive t = v."""
+        f, g = self._fact(f), self._fact(g)
+        t, u = self._sides(f.prop, "trans")
+        u2, v = self._sides(g.prop, "trans")
+        if u != u2:
+            raise TacticError(f"trans: {f.prop} and {g.prop} do not share the middle term")
+        z = self._motive_var(t.sort, t, v)
+        derivation = {
+            "rule": "eq_e",
+            "eq": g._derivation,
+            "motive": _Binder(z, Eq(t, z)),
+            "of": f._derivation,
+        }
+        return Fact(Eq(t, v), derivation, self._join(f, g))
+
+    def congr(self, f: Fact, context: tuple[Term, Term]) -> Fact:
+        """From t = u and (x, s) derive s[t/x] = s[u/x]."""
+        f = self._fact(f)
+        t, u = self._sides(f.prop, "congr")
+        if not (isinstance(context, tuple) and len(context) == 2):
+            raise TacticError("congr expects an (x, s) pair of a variable and a term")
+        x, s = context
+        if not (isinstance(x, Term) and x.is_var) or not isinstance(s, Term):
+            raise TacticError("congr expects an (x, s) pair of a variable and a term")
+        if x.sort != t.sort:
+            raise TacticError(f"congr: {x} has sort {x.sort}, the equation has sort {t.sort}")
+        left = s._replace({x.key: t})
+        z = self._motive_var(t.sort, s, t, u, left)
+        derivation = {
+            "rule": "eq_e",
+            "eq": f._derivation,
+            "motive": _Binder(z, Eq(left, s._replace({x.key: z}))),
+            "of": {"rule": "eq_refl", "term": left},
+        }
+        free = frozenset(k for k in s.free_vars() if k != x.key)
+        scope = self._join_scopes(f._scope, self._scope_of(free))
+        return Fact(Eq(left, s._replace({x.key: u})), derivation, scope)
+
+    def subst(self, f: Fact, g: Fact, motive: tuple[Term, Prop] | None = None) -> Fact:
+        """From t = u and g, replace t by u: in every free occurrence, or where the
+        variable of `motive = (x, A)` stands (then g must prove A[t/x])."""
+        f, g = self._fact(f), self._fact(g)
+        t, u = self._sides(f.prop, "subst")
+        if motive is None:
+            if not g.prop.contains(t):
+                raise TacticError(f"subst: {t} does not occur in {g.prop}")
+            var = self._motive_var(t.sort, g.prop, t, u)
+            body = g.prop.abstract(t, var)
+        else:
+            if not (isinstance(motive, tuple) and len(motive) == 2):
+                raise TacticError("subst motive must be an (x, A) pair")
+            var, body = motive
+            if not (isinstance(var, Term) and var.is_var) or not isinstance(body, Prop):
+                raise TacticError("subst motive must be an (x, A) pair")
+            if var.sort != t.sort:
+                raise TacticError(f"subst: {var} has sort {var.sort}, expected {t.sort}")
+            if g.prop != body.subst_var(var, t):
+                raise TacticError(f"subst: {g.prop} is not the motive at {t}")
+        derivation = {
+            "rule": "eq_e",
+            "eq": f._derivation,
+            "motive": _Binder(var, body),
+            "of": g._derivation,
+        }
+        free = frozenset(k for k in body.free_vars() if k != var.key)
+        scope = self._join_scopes(self._join(f, g), self._scope_of(free))
+        return Fact(body.subst_var(var, u), derivation, scope)
 
     def thm(self, decl: object, subst: Mapping[object, object] | None = None) -> Fact:
         ref = self._resolve(decl)

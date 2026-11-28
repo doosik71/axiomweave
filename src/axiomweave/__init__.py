@@ -1,4 +1,4 @@
-"""AxiomWeave: a Python-based formal proof language (v0.1, fragments L0 and L1).
+"""AxiomWeave: a Python-based formal proof language (v0.1, fragments L0, L1 and L2).
 
 See docs/language-spec.md for the DSL and docs/kernel-spec.md for the kernel.
 """
@@ -6,11 +6,13 @@ See docs/language-spec.md for the DSL and docs/kernel-spec.md for the kernel.
 from axiomweave.core.expressions import (
     And,
     Const,
+    Eq,
     Exists,
     Falsehood,
     ForAll,
     Iff,
     Implies,
+    Ne,
     Not,
     Or,
     PredicateSymbol,
@@ -43,6 +45,7 @@ __all__ = [
     "Const",
     "DeclarationError",
     "Diagnostic",
+    "Eq",
     "Exists",
     "Fact",
     "Falsehood",
@@ -50,6 +53,7 @@ __all__ = [
     "GoalView",
     "Iff",
     "Implies",
+    "Ne",
     "Not",
     "Or",
     "PredicateSymbol",

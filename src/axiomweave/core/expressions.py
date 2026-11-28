@@ -1,8 +1,9 @@
-"""Propositions and terms for the Python DSL (language-spec §4, §12).
+"""Propositions and terms for the Python DSL (language-spec §4, §12, §13).
 
 A `Prop` is an immutable tree of schematic variables (atoms and predicate
-symbols), `Falsehood`, the primitive connectives `and`, `or`, `imp`, and in
-fragment L1 predicate constants and the quantifiers `forall`/`exists`.
+symbols), `Falsehood`, the primitive connectives `and`, `or`, `imp`, in
+fragment L1 predicate constants and the quantifiers `forall`/`exists`, and in
+fragment L2 equalities between terms of one sort.
 Abbreviations (`Not`, `Truth`, `Iff`) are expanded when constructed, so they
 never reach the kernel.
 
@@ -213,6 +214,21 @@ class Term:
     def free_vars(self) -> frozenset[VarKey]:
         return self._free
 
+    def occurs_in(self, other: "Term") -> bool:
+        """True if this term is a subterm of `other`."""
+        if self == other:
+            return True
+        return not other.is_var and any(self.occurs_in(a) for a in other._node[2])
+
+    def _abstract(self, term: "Term", var: "Term") -> "Term":
+        """Replace every occurrence of `term` in this term by `var`."""
+        if self == term:
+            return var
+        if self.is_var:
+            return self
+        const, args = self._node[1], self._node[2]
+        return Term(("app", const, tuple(a._abstract(term, var) for a in args)), self.sort)
+
     def _replace(self, terms: Mapping[VarKey, "Term"]) -> "Term":
         if not terms or not (self._free & terms.keys()):
             return self
@@ -304,6 +320,10 @@ class Prop:
             free = left._free | right._free
             names = _merge_sorts(left._names, right._names)
             schemas = left._schemas | right._schemas
+        elif tag == "eq":
+            left, right = node[1], node[2]
+            free = left._free | right._free
+            names = _merge_sorts(left._names, right._names)
         elif tag in _QUANTIFIERS:
             var, body = node[1], node[2]
             free = body._free - {var.key}
@@ -334,7 +354,7 @@ class Prop:
 
     @property
     def tag(self) -> str:
-        """One of "atom", "false", "and", "or", "imp", "pvar", "pred", "forall", "exists"."""
+        """One of "atom", "false", "and", "or", "imp", "pvar", "pred", "forall", "exists", "eq"."""
         tag: str = self._node[0]
         return tag
 
@@ -384,6 +404,13 @@ class Prop:
             raise AttributeError(f"{self.tag} has no arguments")
         args: tuple[Term, ...] = self._node[2]
         return args
+
+    @property
+    def sides(self) -> tuple[Term, Term]:
+        """The two terms of an equality."""
+        if self.tag != "eq":
+            raise AttributeError(f"{self.tag} is not an equality")
+        return self._node[1], self._node[2]
 
     def atoms(self) -> frozenset[str]:
         """Names of the schematic variables (atoms and predicate symbols) in this proposition."""
@@ -435,7 +462,10 @@ class Prop:
 
         def go(p: Prop) -> None:
             tag = p.tag
-            if tag in ("pvar", "pred"):
+            if tag == "eq":
+                for a in p.sides:
+                    term(a)
+            elif tag in ("pvar", "pred"):
                 if tag == "pred":
                     consts.add(p._node[1])
                 for a in p.args:
@@ -464,6 +494,16 @@ class Prop:
         """Capture-avoiding substitution of `term` for the free variable `var`."""
         return _replace(self, {var.key: term}, {})
 
+    def abstract(self, term: Term, var: Term) -> "Prop":
+        """Replace every free occurrence of `term` by the variable `var`
+        (language-spec §13.3). `var` must not occur in this proposition."""
+        return _abstract(self, term, var)
+
+    def contains(self, term: Term) -> bool:
+        """True if `term` has a free occurrence in this proposition."""
+        probe = Var(_fresh_name("occ", self.var_names() | {n for n, _ in term._free}), term.sort)
+        return probe.key in self.abstract(term, probe)._free
+
     def open(self, var: Term) -> "Prop":
         """The body of a quantifier with its bound variable replaced by `var`."""
         return self.body.subst_var(self.var, var)
@@ -481,6 +521,9 @@ class Prop:
         if tag in ("pvar", "pred"):
             name = self.name if tag == "pvar" else self._node[1].name
             return [tag, name, [a.to_json(scope) for a in self.args]]
+        if tag == "eq":
+            left, right = self.sides
+            return ["eq", left.to_json(scope), right.to_json(scope)]
         if tag in _QUANTIFIERS:
             return [tag, self.var.sort.name, self.body.to_json((*scope, self.var))]
         return [tag, self.left.to_json(scope), self.right.to_json(scope)]
@@ -502,6 +545,8 @@ class Prop:
         if tag in ("pvar", "pred"):
             head = self.name if tag == "pvar" else self._node[1].name
             return (tag, head, tuple(_term_key(a, bound) for a in self.args))
+        if tag == "eq":
+            return ("eq", *(_term_key(a, bound) for a in self.sides))
         if tag in _QUANTIFIERS:
             return (tag, self.var.sort.name, self.body._alpha_key((*bound, self.var.key)))
         return (tag, self.left._alpha_key(bound), self.right._alpha_key(bound))
@@ -551,6 +596,9 @@ class Prop:
             if not self.args:
                 return head, _ATOMIC_PRECEDENCE
             return f"{head}({', '.join(str(a) for a in self.args)})", _ATOMIC_PRECEDENCE
+        if tag == "eq":
+            lhs, rhs = self.sides
+            return f"{lhs} = {rhs}", _ATOMIC_PRECEDENCE
         if tag in _QUANTIFIERS:
             symbol = "∀" if tag == "forall" else "∃"
             body = self.body._format()[0]
@@ -576,6 +624,9 @@ class Prop:
         if tag in _QUANTIFIERS:
             constructor = "ForAll" if tag == "forall" else "Exists"
             return f"{constructor}({self.var!r}, {self.body!r})"
+        if tag == "eq":
+            left, right = self.sides
+            return f"Eq({left!r}, {right!r})"
         return f"<Prop {self}>"
 
 
@@ -615,6 +666,9 @@ def _replace(prop: Prop, terms: dict[VarKey, Term], schema: dict[str, SchemaValu
         return Prop((tag, prop._node[1], args))
     if tag in _BINARY:
         return Prop((tag, _replace(prop.left, terms, schema), _replace(prop.right, terms, schema)))
+    if tag == "eq":
+        left, right = prop.sides
+        return Prop(("eq", left._replace(terms), right._replace(terms)))
     # quantifier
     var, body = prop.var, prop.body
     inner = {k: t for k, t in terms.items() if k != var.key}
@@ -630,6 +684,24 @@ def _replace(prop: Prop, terms: dict[VarKey, Term], schema: dict[str, SchemaValu
         inner[var.key] = renamed
         var = renamed
     return Prop((tag, var, _replace(body, inner, schema)))
+
+
+def _abstract(prop: Prop, term: Term, var: Term) -> Prop:
+    """Replace the free occurrences of `term` in `prop` by `var` (no capture: occurrences
+    under a binder of one of `term`'s variables are not free)."""
+    tag = prop.tag
+    if tag in ("atom", "false"):
+        return prop
+    if tag in ("pvar", "pred"):
+        return Prop((tag, prop._node[1], tuple(a._abstract(term, var) for a in prop.args)))
+    if tag == "eq":
+        left, right = prop.sides
+        return Prop(("eq", left._abstract(term, var), right._abstract(term, var)))
+    if tag in _BINARY:
+        return Prop((tag, _abstract(prop.left, term, var), _abstract(prop.right, term, var)))
+    if prop.var.key in term._free:
+        return prop  # the term's variable is rebound below: no free occurrences
+    return Prop((tag, prop.var, _abstract(prop.body, term, var)))
 
 
 def _require(value: object, where: str) -> Prop:
@@ -672,6 +744,21 @@ def Iff(a: Prop, b: Prop) -> Prop:
 
 Truth = Prop(("imp", Falsehood, Falsehood))
 """⊤, expanded to ⊥ → ⊥."""
+
+
+def Eq(left: Term, right: Term) -> Prop:
+    """The equality left = right between terms of one sort (language-spec §13.2)."""
+    for side in (left, right):
+        if not isinstance(side, Term):
+            raise AxwTypeError(f"Eq expects Term arguments, got {type(side).__name__}")
+    if left.sort != right.sort:
+        raise AxwTypeError(f"Eq needs terms of one sort, got {left.sort} and {right.sort}")
+    return Prop(("eq", left, right))
+
+
+def Ne(left: Term, right: Term) -> Prop:
+    """¬(left = right), expanded to (left = right) → ⊥."""
+    return Not(Eq(left, right))
 
 
 def _quantify(tag: str, variables: object, body: object, where: str) -> Prop:

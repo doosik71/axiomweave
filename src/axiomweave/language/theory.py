@@ -307,7 +307,12 @@ class Theory:
             hashes[d.name] = decl["hash"]
             claimed_axioms[d.name] = frozenset(decl["axioms"])
 
-        self._fragment = "L1" if any(isinstance(d, Sort) for d in declarations) else "L0"
+        if _uses_equality(bundle_declarations):
+            self._fragment = "L2"
+        elif any(isinstance(d, Sort) for d in declarations):
+            self._fragment = "L1"
+        else:
+            self._fragment = "L0"
         bundle = self._bundle(bundle_declarations)
         report = check_bundle(canonical_json(bundle), policy)
         verified: list[dict[str, Any]] = []
@@ -449,6 +454,19 @@ class Theory:
         }
         bundle["bundle_hash"] = bundle_hash(bundle)
         return bundle
+
+
+def _uses_equality(value: Any) -> bool:
+    """True if a declaration JSON uses an L2 construct (language-spec §13.4)."""
+    if isinstance(value, list):
+        if value and value[0] == "eq":
+            return True
+        return any(_uses_equality(v) for v in value)
+    if isinstance(value, dict):
+        if value.get("rule") in ("eq_refl", "eq_e"):
+            return True
+        return any(_uses_equality(v) for v in value.values())
+    return False
 
 
 def _axioms_of(node: dict[str, Any], claimed: dict[str, frozenset[str]]) -> set[str]:

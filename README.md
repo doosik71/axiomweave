@@ -10,7 +10,7 @@
 ![Package manager](https://img.shields.io/badge/package%20manager-uv-purple)
 ![Version](https://img.shields.io/badge/target-v0.1.0-lightgrey)
 
-> **개발 상태:** Pre-alpha. 직관주의 명제 논리(L0), 일차 술어 논리(L1), 등식(L2)의 검증 커널(AxiomCore), Python DSL(`Theory`, 증명 전술, L1의 종·상수·`ForAll`/`Exists`), 표준 Theory(`classical`, 직관주의 명제 논리 정리 라이브러리 `propositional`), `axw check`/`axw verify` CLI가 구현되어 있다. 그 밖의 API, CLI 명령, 파일 구조 및 로드맵 항목은 목표 명세이며 구현 또는 배포 완료를 의미하지 않는다.
+> **개발 상태:** Pre-alpha. 직관주의 명제 논리(L0), 일차 술어 논리(L1), 등식(L2)의 검증 커널(AxiomCore), Python DSL(`Theory`, 증명 전술, L1의 종·상수·`ForAll`/`Exists`, L2의 `Eq`와 등식 전술), 표준 Theory(`classical`, 직관주의 명제 논리 정리 라이브러리 `propositional`), `axw check`/`axw verify` CLI가 구현되어 있다. 그 밖의 API, CLI 명령, 파일 구조 및 로드맵 항목은 목표 명세이며 구현 또는 배포 완료를 의미하지 않는다.
 
 ## 1. Overview
 
@@ -88,7 +88,7 @@ flowchart TD
 
 ## 4. Language Examples
 
-> 4.1의 명제 논리 예제는 현재 구현(v0.1, L0)으로 실행할 수 있다. 일차 술어 논리(L1) 예제는 [examples/logic/first_order.py](examples/logic/first_order.py)에 있다. 4.2와 4.3은 실수 이론 등 이후 단계의 **설계 예정 API** 예시이다. v0.1 API의 규범적 정의는 [docs/language-spec.md](docs/language-spec.md)를 따른다.
+> 4.1의 명제 논리 예제는 현재 구현(v0.1, L0)으로 실행할 수 있다. 일차 술어 논리(L1)와 등식(L2) 예제는 [examples/logic/first_order.py](examples/logic/first_order.py)와 [examples/logic/equality.py](examples/logic/equality.py)에 있다. 4.2와 4.3은 실수 이론 등 이후 단계의 **설계 예정 API** 예시이다. v0.1 API의 규범적 정의는 [docs/language-spec.md](docs/language-spec.md)를 따른다.
 
 ### 4.1. Propositional Logic
 
@@ -450,7 +450,7 @@ uv build
 - [x] **M0 — Specification:** 논리 체계, 표현식 및 증명 객체 형식 명세
 - [x] **M1 — AxiomCore:** 명제 논리 AST 및 최소 자연 연역 검증 커널
 - [x] **M2 — AxiomWeave v0.1:** Python DSL, 기본 전술, 명제 논리 정리 라이브러리(`classical`, `propositional`) 및 CLI
-- [ ] **M3 — Arithmetic:** 타입이 지정된 항, 양화사, 등식, 자연수 및 귀납법 (L1 일차 술어 논리 구현됨: [logic-spec §12](docs/logic-spec.md#12-단편-l1-일차-술어-논리), L2 등식 커널 구현됨, DSL 미구현: [logic-spec §13](docs/logic-spec.md#13-단편-l2-등식))
+- [ ] **M3 — Arithmetic:** 타입이 지정된 항, 양화사, 등식, 자연수 및 귀납법 (L1 일차 술어 논리 구현됨: [logic-spec §12](docs/logic-spec.md#12-단편-l1-일차-술어-논리), L2 등식 구현됨: [logic-spec §13](docs/logic-spec.md#13-단편-l2-등식))
 - [ ] **M4 — Interoperability:** SymPy, SMT, Lean 연계와 검증 가능한 인증서 변환
 - [ ] **M5 — AxiomAI:** 정리 검색, 자동 증명 탐색 및 벤치마크
 - [ ] **M6 — Tooling:** Jupyter, IDE 및 증명 지식 그래프

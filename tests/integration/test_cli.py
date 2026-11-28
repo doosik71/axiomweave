@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE = ROOT / "examples" / "logic" / "implication.py"
 FIRST_ORDER = ROOT / "examples" / "logic" / "first_order.py"
+EQUALITY = ROOT / "examples" / "logic" / "equality.py"
 
 
 def axw(*args: str, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
@@ -75,6 +76,14 @@ def test_verify_first_order_certificate(tmp_path: Path) -> None:
     result = axw("verify", str(certificate))
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ACCEPTED  examples.first_order.U" in result.stdout
+
+
+def test_check_and_verify_equality_example(tmp_path: Path) -> None:
+    result = axw("check", str(EQUALITY))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "VERIFIED  examples.equality.f_congr" in result.stdout
+    verified = axw("verify", str(export_example(tmp_path, EQUALITY)))
+    assert verified.returncode == 0, verified.stdout + verified.stderr
 
 
 def test_verify_exported_certificate(tmp_path: Path) -> None:
