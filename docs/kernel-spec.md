@@ -278,7 +278,7 @@ $\mathrm{infer}(E, \Gamma, D)$는 도출 노드 $D$의 결론과 의존 공리 �
 | -------------- | --------------------------- | --------- |
 | `classical.em` | $P \lor (P \to \bot)$ (`["or", ["atom", "P"], ["imp", ["atom", "P"], ["false"]]]`) | `sha256:e3dde0812143549271fc6753bfb9f64adce3be606a7b1eedfdd7feff7282c0dc` |
 
-이 해시는 `{"kind": "axiom", "name": "classical.em", "statement": …}`의 선언 해시이다. 따라서 [language-spec.md §10](language-spec.md#10-표준-theory-classical)의 `classical` Theory는 원자 이름 `P`로 이 명제를 선언해야 한다.
+이 해시는 `{"kind": "axiom", "name": "classical.em", "statement": …}`의 선언 해시이다. 따라서 [language-spec.md §10.1](language-spec.md#101-classical)의 `classical` Theory는 원자 이름 `P`로 이 명제를 선언해야 한다.
 
 ### 9.3. 언어 계층과의 연결
 

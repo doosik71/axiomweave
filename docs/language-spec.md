@@ -366,7 +366,11 @@ Elaboration은 증명 함수의 실행 기록을 [logic-spec.md §8](logic-spec.
 - 오류 시점의 목표 목록 ([6.6](#66-증명-상태-조회) 형식)
 - 커널 단계 오류의 경우, 거부한 규칙 적용과 사유
 
-## 10. 표준 Theory: `classical`
+## 10. 표준 Theory
+
+v0.1 패키지는 AxiomLib의 표준 Theory로 `classical`(10.1)과 `propositional`(10.2)을 제공한다. 표준 Theory는 일반 사용자 Theory와 같은 DSL로 작성하며, 다른 Theory와 마찬가지로 `check()`에서 커널이 검증한다. 표준 Theory라는 이유로 검증을 생략해서는 안 된다.
+
+### 10.1. `classical`
 
 v0.1 패키지는 [logic-spec.md §9](logic-spec.md#9-고전-원리)의 고전 원리를 담은 Theory를 제공해야 한다.
 
@@ -382,6 +386,59 @@ from axiomweave.lib.logic.classical import classical, em, dne, peirce
 
 - `dne`와 `peirce`는 `em`으로부터 증명되어야 한다.
 - 이 Theory를 가져오지 않은 Theory의 정리는 고전 원리에 의존할 수 없다.
+
+### 10.2. `propositional`
+
+v0.1 패키지는 직관주의 명제 논리의 기본 법칙을 담은 Theory를 제공해야 한다.
+
+```python
+from axiomweave.lib.logic.propositional import propositional, and_comm, iff_trans
+```
+
+- Theory 이름은 `propositional`이며, 아무 Theory도 가져오지 않고 공리를 선언하지 않는다. 따라서 모든 정리의 의존 공리 집합은 비어 있어야 한다.
+- 정리의 명제는 원자 `P`, `Q`, `R`만 사용한다. 다른 명제에 쓰려면 `ctx.thm(and_comm, {P: A, Q: B})`처럼 치환한다 ([6.4](#64-전방-추론-연산)).
+- 모듈은 아래 표의 각 정리를 같은 이름의 `Theorem` 핸들로 노출해야 하며, 선언 순서는 표의 순서이다. 뒤의 정리의 증명은 앞의 정리를 사용할 수 있다.
+- 고전 원리가 필요한 법칙(예: $\lnot(P \land Q) \to \lnot P \lor \lnot Q$)은 이 Theory에 넣어서는 안 된다.
+
+| 분류     | 핸들                 | 명제 (DSL 표기)                                    |
+| -------- | -------------------- | -------------------------------------------------- |
+| 함의     | `imp_refl`           | `P >> P`                                           |
+|          | `imp_const`          | `Implies(P, Q, P)`                                 |
+|          | `imp_trans`          | `Implies(P >> Q, Q >> R, P >> R)`                  |
+|          | `imp_swap`           | `Implies(P, Q, R) >> Implies(Q, P, R)`             |
+|          | `imp_distrib`        | `Implies(Implies(P, Q, R), P >> Q, P >> R)`        |
+| 논리곱   | `and_intro`          | `Implies(P, Q, P & Q)`                             |
+|          | `and_left`           | `(P & Q) >> P`                                     |
+|          | `and_right`          | `(P & Q) >> Q`                                     |
+|          | `and_comm`           | `(P & Q) >> (Q & P)`                               |
+|          | `and_assoc`          | `Iff((P & Q) & R, P & (Q & R))`                    |
+|          | `and_self`           | `Iff(P & P, P)`                                    |
+| 논리합   | `or_inl`             | `P >> (P \| Q)`                                    |
+|          | `or_inr`             | `Q >> (P \| Q)`                                    |
+|          | `or_elim`            | `Implies(P \| Q, P >> R, Q >> R, R)`               |
+|          | `or_comm`            | `(P \| Q) >> (Q \| P)`                             |
+|          | `or_assoc`           | `Iff((P \| Q) \| R, P \| (Q \| R))`                |
+|          | `or_self`            | `Iff(P \| P, P)`                                   |
+| 분배·커링 | `and_or_distrib`    | `Iff(P & (Q \| R), (P & Q) \| (P & R))`            |
+|          | `or_and_distrib`     | `Iff(P \| (Q & R), (P \| Q) & (P \| R))`           |
+|          | `curry`              | `Iff((P & Q) >> R, Implies(P, Q, R))`              |
+|          | `or_imp`             | `Iff((P \| Q) >> R, (P >> R) & (Q >> R))`          |
+| 부정     | `false_elim`         | `Falsehood >> P`                                   |
+|          | `truth_intro`        | `Truth`                                            |
+|          | `explosion`          | `Implies(~P, P, Q)`                                |
+|          | `not_contradiction`  | `~(P & ~P)`                                        |
+|          | `contrapositive`     | `(P >> Q) >> (~Q >> ~P)`                           |
+|          | `dni`                | `P >> ~~P`                                         |
+|          | `tne`                | `Iff(~~~P, ~P)`                                    |
+|          | `not_not_em`         | `~~(P \| ~P)`                                      |
+|          | `not_or`             | `Iff(~(P \| Q), ~P & ~Q)`                          |
+|          | `not_and_of_or_not`  | `(~P \| ~Q) >> ~(P & Q)`                           |
+| 동치     | `iff_refl`           | `Iff(P, P)`                                        |
+|          | `iff_symm`           | `Iff(P, Q) >> Iff(Q, P)`                           |
+|          | `iff_trans`          | `Implies(Iff(P, Q), Iff(Q, R), Iff(P, R))`         |
+
+- `and_intro`, `and_left`, `or_inl` 등은 증명 문맥의 같은 이름 전방 추론 연산([6.4](#64-전방-추론-연산))과 이름이 같지만, 이 표의 핸들은 `ctx.thm`으로 사용하는 정리이다.
+- 표는 v0.1의 최소 집합이다. 정리를 추가할 때는 이 표에 먼저 추가하고, 기존 정리의 이름·명제·순서를 바꾸지 않는 것을 권장한다. 정리의 선언 해시가 바뀌면 그 정리를 참조하는 기존 인증서는 재검증되지 않는다.
 
 ## 11. 예제
 

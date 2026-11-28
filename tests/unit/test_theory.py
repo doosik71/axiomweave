@@ -110,7 +110,7 @@ def test_language_spec_examples_verify() -> None:
     assert all(r.axioms == frozenset() for r in report.results)
 
 
-def test_classical_theory() -> None:  # language-spec §10
+def test_classical_theory() -> None:  # language-spec §10.1
     report = classical.check()
     assert report.ok, str(report)
     assert dne.axioms == peirce.axioms == {"classical.em"}
