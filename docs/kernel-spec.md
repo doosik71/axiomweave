@@ -1,6 +1,6 @@
 # AxiomWeave 커널 명세 (Kernel Specification)
 
-> **문서 상태:** 초안(Draft) · 단편 L0, L1, L2 · 대상 버전 v0.1 (L1: [§13](#13-단편-l1-인코딩과-검사), L2: [§14](#14-단편-l2-인코딩과-검사)) · L3 개정안([§15](#15-단계-l3-표준-산술-공리-개정안)) 검토 대기  
+> **문서 상태:** 초안(Draft) · 단편 L0, L1, L2와 단계 L3 · 대상 버전 v0.1 (L1: [§13](#13-단편-l1-인코딩과-검사), L2: [§14](#14-단편-l2-인코딩과-검사), L3: [§15](#15-단계-l3-표준-산술-공리))  
 > 상위 문서: [specification.md](specification.md), 논리 규칙: [logic-spec.md](logic-spec.md), 생성 측: [language-spec.md](language-spec.md). 이 문서는 AxiomCore 커널의 입력 형식(증명 객체와 인증서), 정규화와 해시, 이름 구문, 허용 공리 정책, 검증 알고리즘, 결과와 오류, 신뢰 기반을 정의한다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위
@@ -277,8 +277,15 @@ $\mathrm{infer}(E, \Gamma, D)$는 도출 노드 $D$의 결론과 의존 공리 �
 | 이름           | 명제                                                                               | 선언 해시                                                                 |
 | -------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `classical.em` | $P \lor (P \to \bot)$ (`["or", ["atom", "P"], ["imp", ["atom", "P"], ["false"]]]`) | `sha256:e3dde0812143549271fc6753bfb9f64adce3be606a7b1eedfdd7feff7282c0dc` |
+| `arith.succ_ne_zero` | [15.2](#152-공리의-원시-항) | `sha256:756e2b6a0efec199b64ec6aa4e3e49407a16bc4fb14130af5bd6765bdfd7bd56` |
+| `arith.succ_inj` | [15.2](#152-공리의-원시-항) | `sha256:fde2203bfef7f1ccf157aa7b975f46b7ddd9c9e545a9d36de32c9bee438d3f4b` |
+| `arith.add_zero` | [15.2](#152-공리의-원시-항) | `sha256:811b749e6d0bcb653f48075bef18d9552b7855bca3750ed14a522aa40d066ba4` |
+| `arith.add_succ` | [15.2](#152-공리의-원시-항) | `sha256:40292ce86e7e2590f7db45aaf6195ec0f7b372d4abc8c51f59e293ad75123087` |
+| `arith.mul_zero` | [15.2](#152-공리의-원시-항) | `sha256:ed7db7a8ebb11ea9ba0a5110b05e9a330e8e7bc990dcbec68d0015c1daf066f1` |
+| `arith.mul_succ` | [15.2](#152-공리의-원시-항) | `sha256:baf1f29869d1ebc264b5d6220b854553ba76adc8715b012f0c8902d08d89067a` |
+| `arith.induction` | [15.2](#152-공리의-원시-항) | `sha256:b34d4328e56bf5d1eea2660ea593047f902ededfebb8a082ec6e7b5252339115` |
 
-이 해시는 `{"kind": "axiom", "name": "classical.em", "statement": …}`의 선언 해시이다. 따라서 [language-spec.md §10.1](language-spec.md#101-classical)의 `classical` Theory는 원자 이름 `P`로 이 명제를 선언해야 한다.
+각 해시는 `{"kind": "axiom", "name": …, "statement": …}`의 선언 해시이다. `classical.em`의 해시는 `{"kind": "axiom", "name": "classical.em", "statement": …}`의 선언 해시이다. 따라서 [language-spec.md §10.1](language-spec.md#101-classical)의 `classical` Theory는 원자 이름 `P`로 이 명제를 선언해야 한다.
 
 ### 9.3. 언어 계층과의 연결
 
@@ -671,9 +678,9 @@ L0 번들에서는 이 두 코드가 나타나지 않는다. L0의 타입 오류
 
 `eq_e`에서 $\Delta = [U, U]$ ($x$ = 인덱스 1, $y$ = 인덱스 0)이다. 동기 `["eq", ["var", 0], ["var", 2]]`는 $\Delta, z$에서 $z = x$이며, $\mathrm{inst}(\cdot, x)$는 $x = x$, $\mathrm{inst}(\cdot, y)$는 $y = x$이다.
 
-## 15. 단계 L3: 표준 산술 공리 (개정안)
+## 15. 단계 L3: 표준 산술 공리
 
-> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 [logic-spec.md §14](logic-spec.md#14-단계-l3-자연수와-귀납-개정안)의 표준 산술 공리를 커널 허용 정책에 등록하는 방법을 정의한다. 확정 전까지 `STANDARD_AXIOMS`는 [9.2](#92-표준-정책)의 `classical.em`만 포함한다.
+> **상태:** 확정 · 구현됨 (`axiomweave.kernel.axioms`). 이 절은 [logic-spec.md §14](logic-spec.md#14-단계-l3-자연수와-귀납)의 표준 산술 공리를 커널 허용 정책에 등록하는 방법을 정의한다.
 
 ### 15.1. 설계 결정 요약
 
@@ -699,7 +706,7 @@ L0 번들에서는 이 두 코드가 나타나지 않는다. L0의 타입 오류
 | `arith.induction`     | `["imp", ["pvar", "P", [Z]], ["imp", ["forall", N, ["imp", ["pvar", "P", [v0]], ["pvar", "P", [S(v0)]]]], ["forall", N, ["pvar", "P", [v0]]]]]` |
 
 - 두 변수를 쓰는 공리에서 바깥 변수 $m$은 `v1`, 안쪽 변수 $n$은 `v0`이다.
-- 각 공리의 선언 해시는 `{"kind": "axiom", "name": …, "statement": …}`의 해시([7.3](#73-선언-해시))이다. 해시 값은 구현 시 계산하여 [9.2](#92-표준-정책)의 표에 기록한다.
+- 각 공리의 선언 해시는 `{"kind": "axiom", "name": …, "statement": …}`의 해시([7.3](#73-선언-해시))이다. 해시 값은 [9.2](#92-표준-정책)의 표에 기록되어 있다.
 
 ### 15.3. 정책 사용
 

@@ -1,6 +1,6 @@
 # AxiomWeave 언어 명세 (Language Specification)
 
-> **문서 상태:** 초안(Draft) · 단편 L0, L1, L2 · 대상 버전 v0.1 (L1: [§12](#12-단편-l1-dsl), L2: [§13](#13-단편-l2-dsl)) · L3 개정안([§14](#14-단계-l3-dsl-자연수-개정안)) 검토 대기  
+> **문서 상태:** 초안(Draft) · 단편 L0, L1, L2와 단계 L3 · 대상 버전 v0.1 (L1: [§12](#12-단편-l1-dsl), L2: [§13](#13-단편-l2-dsl), L3: [§14](#14-단계-l3-dsl-자연수))  
 > 상위 문서: [specification.md](specification.md), 논리 규칙: [logic-spec.md](logic-spec.md). 이 문서는 v0.1 Python 임베디드 DSL의 표면 문법, 선언과 증명 작성 방식, 커널 입력으로의 변환(Elaboration)을 정의한다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위
@@ -368,7 +368,7 @@ Elaboration은 증명 함수의 실행 기록을 [logic-spec.md §8](logic-spec.
 
 ## 10. 표준 Theory
 
-v0.1 패키지는 AxiomLib의 표준 Theory로 `classical`(10.1)과 `propositional`(10.2)을 제공한다. 표준 Theory는 일반 사용자 Theory와 같은 DSL로 작성하며, 다른 Theory와 마찬가지로 `check()`에서 커널이 검증한다. 표준 Theory라는 이유로 검증을 생략해서는 안 된다.
+v0.1 패키지는 AxiomLib의 표준 Theory로 `classical`(10.1)과 `propositional`(10.2)을 제공한다. 표준 산술 Theory `arith`는 [14.3](#143-표준-theory-arith)에서 정의한다. 표준 Theory는 일반 사용자 Theory와 같은 DSL로 작성하며, 다른 Theory와 마찬가지로 `check()`에서 커널이 검증한다. 표준 Theory라는 이유로 검증을 생략해서는 안 된다.
 
 ### 10.1. `classical`
 
@@ -911,9 +911,9 @@ def _(ctx):
 | 목표에 없는 항으로 `ctx.rewrite(h)`                   | `TacticError`                                    |
 | `ctx.trans(f, g)`에서 가운데 항이 다름               | `TacticError`                                    |
 
-## 14. 단계 L3 DSL: 자연수 (개정안)
+## 14. 단계 L3 DSL: 자연수
 
-> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 [logic-spec.md §14](logic-spec.md#14-단계-l3-자연수와-귀납-개정안)의 표준 산술 Theory를 Python DSL로 제공하는 방법을 정의한다. 확정 전에는 구현하지 않으며, 이 절에서 정하지 않은 사항은 §13을 따른다.
+> **상태:** 확정 · 구현됨 (`axiomweave.lib.arithmetic.peano`, `ctx.induction`). 이 절은 [logic-spec.md §14](logic-spec.md#14-단계-l3-자연수와-귀납)의 표준 산술 Theory를 Python DSL로 제공하는 방법을 정의한다. 이 절에서 정하지 않은 사항은 §13을 따른다.
 
 ### 14.1. 설계 결정 요약
 
@@ -971,7 +971,7 @@ from axiomweave.lib.arithmetic.peano import arith, Nat, zero, succ, add, mul, nu
 | `ctx.induction()`               | $\forall n{:}\mathit{Nat}.\, A$    | 목표를 $A[0/n]$와 $\forall n{:}\mathit{Nat}.\, A \to A[S(n)/n]$ 두 개로 바꿈 (이 순서)    |
 
 - 목표가 종 `arith.Nat`에 대한 전칭이 아니면 `TacticError`를 일으켜야 한다.
-- 현재 Theory의 환경에 `arith`가 없으면 `DeclarationError`를 일으켜야 한다.
+- 전술은 공리를 정규 이름 `arith.induction`으로 현재 Theory의 환경에서 찾는다. 따라서 라이브러리 모듈이 어떤 경로로 로드되었든 환경에 있는 `arith`를 사용한다. 환경에 없으면 `DeclarationError`를 일으켜야 한다.
 - Elaboration: `arith.induction`을 $P \mapsto \lambda n.\, A$로 인스턴스화하는 $\mathrm{Ax}$와 두 번의 $\to\mathrm{E}$이다. $A$에 현재 문맥의 변수가 있어도 된다.
 - 귀납 단계 목표는 `intro`로 변수와 귀납 가정을 도입하여 증명한다.
 

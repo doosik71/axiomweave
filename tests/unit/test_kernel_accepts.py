@@ -146,10 +146,22 @@ def test_weakening_unused_hypothesis() -> None:
     assert check(theorem("demo.logic.weak", imp(P, FALSE, P), proof)) == (VERIFIED,)
 
 
-def test_standard_axiom_hash_matches_kernel_spec() -> None:  # kernel-spec §9.2
-    expected = "sha256:e3dde0812143549271fc6753bfb9f64adce3be606a7b1eedfdd7feff7282c0dc"
-    assert dict(STANDARD_AXIOMS) == {"classical.em": expected}
-    assert EM["hash"] == expected
+# kernel-spec §9.2 (classical.em) and §15 (standard arithmetic).
+SPEC_HASHES = {
+    "classical.em": "sha256:e3dde0812143549271fc6753bfb9f64adce3be606a7b1eedfdd7feff7282c0dc",
+    "arith.succ_ne_zero": "sha256:756e2b6a0efec199b64ec6aa4e3e49407a16bc4fb14130af5bd6765bdfd7bd56",
+    "arith.succ_inj": "sha256:fde2203bfef7f1ccf157aa7b975f46b7ddd9c9e545a9d36de32c9bee438d3f4b",
+    "arith.add_zero": "sha256:811b749e6d0bcb653f48075bef18d9552b7855bca3750ed14a522aa40d066ba4",
+    "arith.add_succ": "sha256:40292ce86e7e2590f7db45aaf6195ec0f7b372d4abc8c51f59e293ad75123087",
+    "arith.mul_zero": "sha256:ed7db7a8ebb11ea9ba0a5110b05e9a330e8e7bc990dcbec68d0015c1daf066f1",
+    "arith.mul_succ": "sha256:baf1f29869d1ebc264b5d6220b854553ba76adc8715b012f0c8902d08d89067a",
+    "arith.induction": "sha256:b34d4328e56bf5d1eea2660ea593047f902ededfebb8a082ec6e7b5252339115",
+}
+
+
+def test_standard_axiom_hashes_match_kernel_spec() -> None:
+    assert dict(STANDARD_AXIOMS) == SPEC_HASHES
+    assert EM["hash"] == SPEC_HASHES["classical.em"]
 
 
 def _kernel_spec_example() -> dict[str, object]:

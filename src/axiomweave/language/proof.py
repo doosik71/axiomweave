@@ -1,5 +1,5 @@
 """Proof context: goal tactics, forward rules and derivation building
-(language-spec §6–7, §12.5–12.6, §13.3–13.4).
+(language-spec §6–7, §12.5–12.6, §13.3–13.4, §14.4).
 
 Tactics build a kernel derivation tree (kernel-spec §5, §13.5) whose open
 positions are `_Goal` objects. Propositions and terms stay named while the
@@ -660,8 +660,31 @@ class ProofContext:
         scope = self._join_scopes(self._join(f, g), self._scope_of(free))
         return Fact(body.subst_var(var, u), derivation, scope)
 
+    # --- natural numbers (language-spec §14.4) ----------------------------------------
+
+    def induction(self) -> None:
+        """Split `∀n:Nat. A` into `A[0/n]` and `∀n:Nat. A → A[S(n)/n]` using the
+        `arith.induction` axiom schema (no new kernel rule)."""
+        goal = self._current()
+        target = goal.target
+        self._expect_quantifier(target, "forall", "induction")
+        sort = target.var.sort
+        if sort.name != "arith.Nat":
+            raise TacticError(f"induction needs a goal ∀n:Nat, got {target}")
+        # Look the axiom up by its canonical name, so that any loaded copy of the
+        # `arith` library in this theory's environment is used.
+        motive = Prop.symbol("P", sort)
+        schema = self._instance(
+            self._resolve("arith.induction"), {motive: ((target.var,), target.body)}
+        )
+        self.apply(schema)
+
     def thm(self, decl: object, subst: Mapping[object, object] | None = None) -> Fact:
-        ref = self._resolve(decl)
+        if isinstance(decl, str):
+            raise AxwTypeError(f"thm expects a Theorem or Axiom handle, got {decl!r}")
+        return self._instance(self._resolve(decl), subst)
+
+    def _instance(self, ref: DeclRef, subst: Mapping[object, object] | None) -> Fact:
         signature = ref.statement.signature()
         values: dict[str, SchemaValue] = {}
         scope: Scope = frozenset()

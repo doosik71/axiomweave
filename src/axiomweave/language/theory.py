@@ -395,6 +395,13 @@ class Theory:
             return unproven()
 
         def resolve(target: object) -> DeclRef:
+            if isinstance(target, str):  # internal lookup by canonical name (ctx.induction)
+                found = next((d for d in declarations if d.name == target), None)
+                if found is None:
+                    raise DeclarationError(
+                        f"{target} is not in the environment of {self.name}; import its theory"
+                    )
+                target = found
             if not isinstance(target, Axiom | Theorem):  # sorts and constants are not facts
                 raise AxwTypeError(f"thm expects a Theorem or Axiom, got {target!r}")
             index = position.get(id(target))

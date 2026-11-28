@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE = ROOT / "examples" / "logic" / "implication.py"
 FIRST_ORDER = ROOT / "examples" / "logic" / "first_order.py"
 EQUALITY = ROOT / "examples" / "logic" / "equality.py"
+PEANO = ROOT / "src" / "axiomweave" / "lib" / "arithmetic" / "peano.py"
 
 
 def axw(*args: str, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
@@ -84,6 +85,14 @@ def test_check_and_verify_equality_example(tmp_path: Path) -> None:
     assert "VERIFIED  examples.equality.f_congr" in result.stdout
     verified = axw("verify", str(export_example(tmp_path, EQUALITY)))
     assert verified.returncode == 0, verified.stdout + verified.stderr
+
+
+def test_check_arith_library_loaded_from_its_file() -> None:
+    # The file is loaded as a fresh module, so `ctx.induction()` must find the
+    # induction axiom in that module's theory, not in the installed package.
+    result = axw("check", str(PEANO))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "VERIFIED  arith.add_assoc" in result.stdout
 
 
 def test_verify_exported_certificate(tmp_path: Path) -> None:
