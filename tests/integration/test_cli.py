@@ -169,3 +169,18 @@ def test_search_lists_matching_declarations() -> None:
     peano = axw("search", str(PEANO), "MUL", "comm")
     assert "arith.mul_comm" in peano.stdout and "arith.mul_right_comm" in peano.stdout
     assert axw("search", str(EXAMPLE), "nothing_matches_this").returncode == 1
+
+
+def test_bench_command(tmp_path: Path) -> None:
+    out = tmp_path / "bench.json"
+    result = axw("bench", "--category", "arithmetic", "--solver", "ring", "--json", str(out))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "arith.two_plus_two" in result.stdout
+    assert "arithmetic     ring 13/18" in result.stdout
+    records = json.loads(out.read_text(encoding="utf-8"))
+    assert len(records) == 20 and {r["solver"] for r in records} == {"ring"}
+    assert axw("bench", "--solver", "nope").returncode == 2
+    assert axw("bench", "--category", "nope").returncode == 2
+    references = axw("bench", "--check-references", "--category", "propositional")
+    assert references.returncode == 0
+    assert "references: 20/20 verified" in references.stdout

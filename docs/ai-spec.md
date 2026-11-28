@@ -1,6 +1,6 @@
 # AxiomWeave 자동화 명세 (AxiomAI Specification)
 
-> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.ai.propositional`, `ctx.auto`) · §4 확정 · 구현됨 (`axiomweave.ai.search`, `ctx.search`, `axw search`) · §5 개정안 검토 대기  
+> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.ai.propositional`, `ctx.auto`) · §4 확정 · 구현됨 (`axiomweave.ai.search`, `ctx.search`, `axw search`) · §5 확정 · 구현됨 (`axiomweave.bench`, `axw bench`)  
 > 상위 문서: [specification.md](specification.md). 이 문서는 증명을 자동으로 찾는 계층(AxiomAI)을 정의한다. 첫 대상은 명제 논리 결정 절차 `ctx.auto()`(§3)이고, 다음은 정리 검색 `ctx.search()`(§4)와 벤치마크 `axw bench`(§5)이다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위와 원칙
@@ -9,7 +9,7 @@
 | ------------------------------------------------------ | ----------------------------------------------------------- |
 | 직관주의 명제 논리의 완전한 결정 절차 (§3)             | 전술 탐색 루프, 기계 학습 정책 (§6)                         |
 | 목표에 맞는 정리 검색과 이름 검색 (§4)                  |                                                             |
-| 문제 집합과 측정 도구 (§5, 개정안)                      |                                                             |
+| 문제 집합과 측정 도구 (§5)                              |                                                             |
 | 찾은 증명을 기존 전술로 재생하여 도출을 만드는 방법    | 양화사·등식 추론의 자동화                                   |
 
 다음 원칙은 이 문서의 모든 자동화에 적용한다.
@@ -241,9 +241,9 @@ def _(ctx):
 - 다시 쓰기 후보 찾기 (목표 안의 부분 항과 맞는 등식 정리), 전제에서 앞으로 추론하는 검색은 포함하지 않는다.
 - 고차 패턴이 아닌 스키마 술어의 맞추기, 의미 기반(임베딩) 검색은 포함하지 않는다.
 
-## 5. 벤치마크 (개정안)
+## 5. 벤치마크
 
-> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 자동화의 성능을 재는 고정 문제 집합, 기준 풀이기(solver), 측정 도구 `axw bench`를 정의한다. 이후의 전술 탐색(§6)은 이 벤치마크로 평가한다.
+> **상태:** 확정 · 구현됨. 이 절은 자동화의 성능을 재는 고정 문제 집합, 기준 풀이기(solver), 측정 도구 `axw bench`를 정의한다. 이후의 전술 탐색(§6)은 이 벤치마크로 평가한다.
 
 ### 5.1. 목적과 원칙
 
@@ -263,7 +263,7 @@ Problem(
     imports=(),                        # 문제 Theory가 가져오는 표준 Theory
     statement=lambda: ((P & Q) >> R) >> (P >> (Q >> R)),
     expected="provable",               # "provable" | "unprovable"
-    reference=_curry_proof,            # provable이면 필수: ctx -> None
+    reference=_curry_proof,            # provable이면 필수: ctx -> None (어떤 전술이든 쓸 수 있다)
     note="",
 )
 ```
@@ -274,13 +274,13 @@ Problem(
 | `imports`    | `arith`, `propositional`, `classical` 등. 가져온 Theory에 문제와 같은 명제(α-동치)의 정리가 있으면 안 된다 (검색만으로 풀리는 문제를 피한다). 테스트가 확인한다. |
 | `expected`   | `"unprovable"`은 가져온 Theory와 직관주의 논리로 증명할 수 없음이 알려진 문제이다 (예: $P \lor \lnot P$, 술꾼 역설). 이런 문제가 `VERIFIED`가 되면 결함 신호이다. |
 
-**v0.1 문제 집합 (약 60문제).**
+**v0.1 문제 집합 (60문제, provable 51 · unprovable 9).**
 
 | 범주          | 수   | 예                                                                                                 |
 | ------------- | ---- | -------------------------------------------------------------------------------------------------- |
-| `propositional` | 25 | 커링, 분배, 이중 부정 법칙, 드모르간의 직관주의 방향, 비둘기집 PHP(3,2)·(4,3); 증명 불가: 배중률, 이중 부정 제거, 퍼스, Gödel–Dummett $(P\to Q)\lor(Q\to P)$ |
-| `first_order` | 15   | 양화사 교환 $\forall\forall$, $\exists\forall \to \forall\exists$, $\forall$과 $\land$의 분배, 등식의 대칭·추이·합동; 증명 불가: 술꾼 역설, $\lnot\forall \to \exists\lnot$ |
-| `arithmetic`  | 20   | $2 + 2 = 4$, $(n+1)^2$ 전개, $n \ne S(n)$, $0 \cdot n = n \cdot 0$의 변형, 귀납이 필요한 등식, 라이브러리에 없는 가환 반환 항등식 |
+| `propositional` | 25 (20 · 5) | 커링, 분배, 이중 부정 법칙, 드모르간의 직관주의 방향, 비둘기집 PHP(3,2)·(4,3); 증명 불가: 배중률, 이중 부정 제거, 퍼스, Gödel–Dummett $(P\to Q)\lor(Q\to P)$ |
+| `first_order` | 15 (13 · 2) | 양화사 교환 $\forall\forall$, $\exists\forall \to \forall\exists$, $\forall$과 $\land$의 분배, 등식의 대칭·추이·합동; 증명 불가: 술꾼 역설, $\lnot\forall \to \exists\lnot$ |
+| `arithmetic`  | 20 (18 · 2) | $2 + 2 = 4$, $(n+1)^2$·$(n+1)^3$ 전개, $n \ne S(n)$, $1 \ne 2$, 덧셈 소거, $m + n = 0 \to m = 0$, 라이브러리에 없는 가환 반환 항등식; 증명 불가(거짓): $\forall n.\, n + 1 = n$, $\exists n.\, S(n) = 0$ |
 
 ### 5.3. 풀이기
 
@@ -307,6 +307,7 @@ Problem(
 | `nodes`    | 인증서에서 문제 정리의 도출 노드 수 (`VERIFIED`일 때)                                       |
 | `axioms`   | 문제 정리의 의존 공리                                                                      |
 | `error`    | 실패한 경우 진단의 첫 줄                                                                    |
+| `via`      | `portfolio`에서 성공한 풀이기의 이름                                                        |
 
 - 문제 Theory는 `bench.<범주>` 이름공간에 문제마다 새로 만든다. 문제 모듈이 선언한 종·상수가 있으면 그 Theory를 가져온다.
 - 요약은 범주별 `해결 수 / provable 문제 수`, 총 시간, 그리고 `unprovable` 문제가 `VERIFIED`가 된 경우의 경보이다.
@@ -327,7 +328,19 @@ axw bench --check-references               # 문제 집합 자체를 참조 증�
 | `unprovable` 문제가 `VERIFIED`가 됨, 또는 참조 증명이 실패함 | 1         |
 | 사용법 오류 (모르는 풀이기·범주)                             | 2         |
 
-- 표 출력은 문제마다 한 줄(`문제  풀이기별 상태와 시간`)과 범주별 요약이다. JSON은 레코드의 목록이며 각 레코드는 `solver`, `problem`, `category`, `expected`와 §5.4의 항목을 갖는다.
+- 표 출력은 문제마다 한 줄(`문제  풀이기별 상태와 시간`)과 범주별 요약이다. JSON은 레코드의 목록이며 각 레코드는 `solver`, `problem`, `category`, `expected`와 §5.4의 항목을 갖는다. `--check-references`의 레코드는 풀이기 이름이 `reference`이다.
+
+**기준 결과** (비규범, 2026-11-28 측정, 60문제 × 풀이기 4개, 총 11.7초)
+
+| 범주 (provable 수) | `auto` | `search` | `ring` | `portfolio` |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `propositional` (20) | 20 | 0 | 0 | 20 |
+| `first_order` (13)   | 0  | 0 | 0 | 0  |
+| `arithmetic` (18)    | 0  | 2 | 13 | 13 |
+
+- `unprovable` 문제 9개는 어느 풀이기로도 `VERIFIED`가 되지 않았다 (경보 없음).
+- 일차 문제는 양화사의 도입·제거가 필요하므로 기준 풀이기로는 풀리지 않는다. 산술의 남은 5문제는 귀납이나 단사성이 필요하다. 이 두 부분이 전술 탐색(§6)의 첫 평가 대상이다.
+
 
 ### 5.6. 범위 밖
 
