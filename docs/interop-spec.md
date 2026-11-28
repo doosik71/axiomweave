@@ -1,14 +1,15 @@
 # AxiomWeave 상호운용 명세 (Interoperability Specification)
 
-> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`)  
-> 상위 문서: [specification.md](specification.md). 이 문서는 AxiomWeave와 외부 정리 증명 시스템·도구 사이의 변환을 정의한다. 첫 대상은 검증된 인증서를 Lean 4 소스로 내보내는 교차 검증(§3)이다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
+> **문서 상태:** 초안(Draft) · §3 확정 · 구현됨 (`axiomweave.backends.lean`, `axw export-lean`) · §4 개정안 검토 대기  
+> 상위 문서: [specification.md](specification.md). 이 문서는 AxiomWeave와 외부 정리 증명 시스템·도구 사이의 변환을 정의한다. 첫 대상은 검증된 인증서를 Lean 4 소스로 내보내는 교차 검증(§3)이고, 다음은 SMT 솔버로 증명할 수 없는 목표의 반례를 찾는 것(§4)이다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위와 원칙
 
 | 포함                                                       | 제외 (이후 개정)                                                |
 | ---------------------------------------------------------- | --------------------------------------------------------------- |
 | 커널이 수락한 인증서(L0–L2, L3 산술)의 Lean 4 소스 변환    | Lean 증명이나 정리를 AxiomWeave로 가져오기 (`EXTERNAL_VERIFIED`) |
-| 변환 결과를 Lean으로 다시 검사하는 교차 검증 절차          | SMT 솔버, SymPy 연계                                            |
+| 변환 결과를 Lean으로 다시 검사하는 교차 검증 절차          | SMT 응답의 증명 재구성, SymPy 연계                              |
+| Z3 반례 탐색 (§4, 개정안)                                  |                                                                 |
 | 표준 공리의 Lean 대응과 그 증명                            | Mathlib 의존, Lean 외 시스템(Rocq, Isabelle)                    |
 
 다음 원칙은 이 문서의 모든 연계에 적용한다.
@@ -174,8 +175,126 @@ theorem «demo».«fol».«all_and_left» («P» : «demo».«fol».«U» → Pr
       (@And.left («P» x0) («Q» x0) («h_h1» x0))))
 ```
 
-## 4. 이후 연계 (비규범)
+## 4. SMT 반례 탐색 (개정안)
+
+> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 Z3로 증명할 수 없는 목표를 설명하는 반례 탐색을 정의한다. 탐색 결과는 증명이 아니며, 검증 상태와 인증서에 영향을 주지 않는다 (§1 원칙 1–2).
+
+### 4.1. 목적과 지위
+
+반례 탐색은 열린 목표 $\Gamma \vdash A$에 대해, 문맥의 모든 가정이 참이고 $A$가 거짓인 고전 다종(many-sorted) 구조 $M$을 찾는다. 사용자와 자동화 도구는 이를 통해 "이 목표는 지금의 가정으로는 증명할 수 없다"는 사실과 그 이유를 확인한다.
+
+| 결과 (`status`) | 의미                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `found`         | 반례 모델 $M$을 찾았다. 아래 근거에 따라 목표는 주어진 전제로부터 도출되지 않는다.              |
+| `none`          | 인코딩 안에서 반례가 없다. 목표가 고전적으로 참이라는 뜻일 뿐, **증명 가능하다는 뜻이 아니다**. |
+| `unknown`       | 시간 초과, 결정 불가능한 조각(양화사, 비선형 산술) 등으로 판단하지 못했다.                      |
+
+**`found`의 근거.** 다음이 성립하므로, $M \models \Gamma$, $M \models U$, $M \not\models A$이면 $A$는 $\Gamma$, $U$(`using`으로 준 전제), 표준 공리로부터 L0–L3 규칙으로 도출되지 않는다.
+
+1. L0–L2의 모든 규칙은 비어 있지 않은 정의역과 표준 등식을 갖는 고전 다종 구조에 대해 건전하다. L1은 종의 거주성을 가정하지 않으므로([logic-spec.md §12](logic-spec.md#12-단편-l1-일차-술어-논리)), 비어 있지 않은 정의역의 반례만으로 충분하다.
+2. `classical.em`의 모든 인스턴스는 모든 고전 구조에서 참이다.
+3. `arith.*` 공리의 모든 인스턴스(귀납 스키마 포함)는 표준 자연수 $\mathbb{N}$에서 참이다. 따라서 `arith.Nat`을 $\mathbb{N}$으로 해석한다 (§4.3).
+4. 의존 공리가 모두 표준 공리인 `VERIFIED` 정리는 그 모든 인스턴스가 1–3에 따라 $M$에서 참이다. 따라서 그런 정리를 사용해도 목표를 도출할 수 없다.
+
+사용자 공리와, 사용자 공리에 의존하는 정리는 $M$에서 참이라는 보장이 없다. 이들을 전제로 고려하려면 필요한 인스턴스를 `using`에 명시해야 한다. 결과 보고는 고려한 전제의 범위를 함께 표시해야 한다.
+
+`none`은 고전 논리와 $\mathbb{N}$에서의 참을 뜻한다. 직관주의 도출에는 `classical.em`이 필요할 수 있고, 산술 명제는 $\mathbb{N}$에서 참이어도 공리로부터 도출되지 않을 수 있다.
+
+### 4.2. API
+
+```python
+result = ctx.counterexample()                       # 현재 목표, 문맥 가정만 사용
+result = ctx.counterexample(using=[ctx.thm(lemma)], timeout_ms=2000)
+
+from axiomweave.backends.smt import counterexample
+result = counterexample(prop, using=[...])           # 닫힌 명제 (증명 시작 전 점검)
+```
+
+| 항목         | 정의                                                                                                                              |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| 대상         | `ctx.counterexample`은 현재 목표(첫 번째 열린 목표)의 변수, 문맥 가정, 목표 명제를 사용한다. 함수형은 `Prop` 또는 `GoalView`를 받는다. |
+| `using`      | 추가 전제. `Fact` 또는 `Prop`의 목록이다. `Fact`의 명제는 현재 목표의 범위 안에 있어야 한다 (`ScopeError`).                         |
+| `timeout_ms` | Z3 시간 제한. 기본값 5000.                                                                                                        |
+| 부수 효과    | 없다. 목표 목록과 도출을 바꾸지 않으며 인증서에 아무것도 기록하지 않는다.                                                          |
+| 반환         | 불변 객체 `Counterexample(status, model, reason, checked)`. `str(result)`는 §4.4 형식이다.                                        |
+| Z3 미설치    | `BackendUnavailableError`(`AxwError`의 하위 클래스)를 일으킨다. 메시지에 `uv sync --extra smt`를 안내한다.                         |
+
+- Z3는 선택적 의존성(`smt` extra, 패키지 `z3-solver`)이다. `axiomweave`의 다른 모듈은 Z3 없이 동작해야 하며, `axiomweave.backends.smt`는 Z3를 호출 시점에 가져온다.
+- 개발 의존성 그룹에 `z3-solver`를 추가하여 테스트가 기본 개발 환경에서 실행되게 한다. Z3를 가져올 수 없으면 해당 테스트는 건너뛴다.
+
+### 4.3. 인코딩
+
+| AxiomWeave                                                       | Z3                                                                  |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 종 `S`                                                           | 해석되지 않은 종 (`DeclareSort`)                                     |
+| 상수 `c : S₁ → … → S`, 술어 `p : S₁ → … → Prop`                  | 해석되지 않은 함수 (`Function`). 인자가 없으면 상수 (`Const`)         |
+| 원자 $P$, 스키마 술어 변수 $P : S_1 \to \dots \to \mathrm{Prop}$ | `Bool` 상수, `Bool`을 돌려주는 함수. 이름과 인자 종의 쌍마다 다른 기호 |
+| 목표의 변수 (`intro`로 도입한 항 변수)                           | 해당 종의 상수                                                      |
+| $\bot$, $\land$, $\lor$, $\to$                                   | `False`, `And`, `Or`, `Implies`                                     |
+| $\forall x{:}S.\,A$, $\exists x{:}S.\,A$                         | `ForAll`, `Exists`                                                  |
+| $t =_S u$                                                        | `==`                                                                |
+| 문맥 가정, `using`의 명제                                        | 단언 (assert)                                                       |
+| 목표 $A$                                                         | `Not(A)` 단언                                                       |
+
+**표준 산술의 해석.** 현재 환경의 `arith.Nat`, `arith.zero`, `arith.succ`, `arith.add`, `arith.mul`이 표준 Theory `arith`의 선언(정규 이름과 인자·결과 종이 같음)이면 다음과 같이 해석한다.
+
+| 기호                                        | Z3                             |
+| ------------------------------------------- | ------------------------------ |
+| `arith.Nat`                                 | `Int`, 값은 0 이상으로 제한    |
+| `zero`, `succ(t)`, `add(t, u)`, `mul(t, u)` | `0`, `t + 1`, `t + u`, `t * u` |
+
+- `Nat`의 양화사는 범위를 제한한다: $\forall x{:}\mathrm{Nat}.\,A$는 `ForAll x. x >= 0 → A`, $\exists x{:}\mathrm{Nat}.\,A$는 `Exists x. x >= 0 ∧ A`이다.
+- `Nat` 값을 갖는 상수·변수와, `Nat`을 돌려주는 해석되지 않은 함수의 값에도 0 이상이라는 단언을 더한다.
+- 표준 선언이 아니면 `arith.Nat`도 다른 종처럼 해석되지 않은 종으로 인코딩한다.
+
+### 4.4. 모델 표시와 결정성
+
+```text
+counterexample found (Z3 4.x; premises: context)
+  U = {U#0, U#1}
+  a = U#0
+  Even(U#0) = false
+  Even(U#1) = true
+  P = false
+  n = 1
+```
+
+- 해석되지 않은 종의 원소는 `S#i`로 표시한다. `i`는 Z3가 돌려준 원소 순서이다.
+- 함수와 술어는 표시된 원소에 대한 값표로 나타낸다. 인코딩이 만든 보조 기호는 표시하지 않는다.
+- 같은 입력과 같은 Z3 버전에 대해 결과가 같도록 Z3의 무작위 시드를 고정한다. 다른 Z3 버전에서는 다른 (그러나 똑같이 유효한) 모델이 나올 수 있다.
+
+### 4.5. 모델 재검산
+
+Z3와 인코딩은 비신뢰 계층이다. 따라서 `found`인 모델은 가능한 경우 인코딩과 독립적인 Python 평가기로 다시 확인한다.
+
+- 모든 해석되지 않은 종이 유한 정의역을 갖고 `Nat`을 범위로 하는 양화사가 없으면, 평가기는 AxiomWeave 명제를 모델에서 직접 평가하여 모든 전제가 참이고 목표가 거짓임을 확인한다. 확인되면 `checked = True`이다.
+- 평가할 수 없는 모델(예: `Nat` 양화사)은 `checked = False`로 보고한다.
+- 평가기가 Z3와 다른 결론을 내면 결과는 `unknown`이며, `reason`에 불일치를 기록한다. 이는 인코딩 결함 신호이다 (§1 원칙 4).
+
+### 4.6. 예제
+
+예제는 비규범적이다.
+
+```python
+@thy.proof(even_somewhere)               # ⊢ ∃x:U. Even(x)   (가정 없음)
+def _(ctx):
+    print(ctx.counterexample())
+    # counterexample found (...): U = {U#0}, a = U#0, Even(U#0) = false
+
+@thy.proof(lem)                          # ⊢ P ∨ ¬P
+def _(ctx):
+    print(ctx.counterexample().status)   # none: 고전적으로 참. 증명에는 classical.em이 필요하다.
+
+counterexample(ForAll(n, Eq(add(n, n), n)))   # ∀n:Nat. n + n = n → found: n = 1
+```
+
+### 4.7. 범위 밖
+
+- CLI 명령(`axw counterexample` 등)과 증명 실패 진단에 반례를 자동으로 붙이는 기능은 이 개정안에 포함하지 않는다.
+- SMT 응답을 증명으로 재구성하는 기능(§5)은 포함하지 않는다.
+
+## 5. 이후 연계 (비규범)
 
 - **가져오기:** Lean에서 증명된 명제를 `EXTERNAL_VERIFIED`로 기록하는 경로는 Lean 증명 항을 커널 도출로 재구성할 수 있는 단편에서만 `VERIFIED`로 올릴 수 있다 ([specification.md §6](specification.md#6-검증-상태)).
-- **SMT (Z3, cvc5):** 반례 모델로 증명 불가능한 목표를 설명하거나, 명제 논리 목표의 탐색을 돕는다. 솔버의 응답은 커널 도출로 재구성되기 전에는 증명으로 쓰지 않는다.
+- **SMT (Z3, cvc5):** 반례 탐색(§4) 외에, 명제 논리 목표의 탐색을 돕는다. 솔버의 응답은 커널 도출로 재구성되기 전에는 증명으로 쓰지 않는다.
 - **SymPy:** 산술 항의 정규화와 등식 후보 생성에 쓴다. 후보 등식은 L2·L3 전술로 다시 증명한다.
