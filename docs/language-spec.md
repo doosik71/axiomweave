@@ -1,6 +1,6 @@
 # AxiomWeave 언어 명세 (Language Specification)
 
-> **문서 상태:** 초안(Draft) · 단편 L0, L1 · 대상 버전 v0.1 (L1: [§12](#12-단편-l1-dsl))  
+> **문서 상태:** 초안(Draft) · 단편 L0, L1 · 대상 버전 v0.1 (L1: [§12](#12-단편-l1-dsl)) · L2 개정안([§13](#13-단편-l2-dsl-개정안)) 검토 대기  
 > 상위 문서: [specification.md](specification.md), 논리 규칙: [logic-spec.md](logic-spec.md). 이 문서는 v0.1 Python 임베디드 DSL의 표면 문법, 선언과 증명 작성 방식, 커널 입력으로의 변환(Elaboration)을 정의한다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위
@@ -769,11 +769,152 @@ def _(ctx):
 | `split` 뒤 첫 번째 목표에서 `obtain`한 `y`나 `hy`를 두 번째 목표에서 사용 | `ScopeError`                        |
 | 목표가 $\exists x{:}U.\, A$일 때 종이 다른 항으로 `ctx.exists(t)`         | `TacticError`                       |
 
-## 13. 확장 시 유의 사항
+## 13. 단편 L2 DSL (개정안)
 
-이 절은 L2 이후 개정을 위한 비규범적 메모이다.
+> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 [logic-spec.md §13](logic-spec.md#13-단편-l2-등식-개정안)의 등식을 Python DSL로 표현하는 방법을 정의한다. 확정 전에는 구현하지 않으며, 이 절에서 정하지 않은 사항은 §12를 따른다.
 
-- 매개변수를 받는 정리 선언(README §4.3)은 L1에 포함하지 않았다. 도입한다면 `def t(x: U)`의 매개변수를 전칭 양화로 해석하고, 정리의 적용 `t(a)`를 `ctx.spec`으로 Elaboration하는 방식을 검토한다. `@thy.definition`의 본문을 실행하지 않고 제한된 구문으로 변환하는 방식(proposal §5.5)도 함께 검토한다.
-- L2에서 등식을 도입할 때 항의 `==`와 `Eq()`의 관계를 다시 정해야 한다. 이 문서의 결정(`Prop`의 `==`는 구조적 동일성 또는 α-동치)은 `Prop`에만 적용되며, `Term`의 `==`도 같은 원칙을 따르는 것을 권장한다.
-- `rewrite`, `unfold`, `induction` 등 전술과 자동화 전술은 해당 논리 단편이 도입된 뒤 이 문서에 추가한다. 자동화 전술도 이 문서의 전술과 마찬가지로 [7.1](#71-대응-규칙)과 [12.6](#126-elaboration)의 규칙 적용만 생성해야 한다.
+### 13.1. 설계 결정 요약
+
+| 항목                 | 결정                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
+| 등식 생성            | `Eq(t, u)`. 두 인자는 같은 종의 `Term`이어야 한다.                                                     |
+| `Term`의 `==`        | 구조적 동일성(`bool`)을 유지한다. 수학적 등식은 `Eq()`로만 만든다 (§2의 `Prop`의 `==`와 같은 원칙).     |
+| 연산자               | `Term`에 `==`/`!=` 외의 비교 연산자를 정의하지 않는다. `Ne(t, u)`는 `~Eq(t, u)`의 축약이다.            |
+| 전술                 | 목표 전술 `rfl`, `rewrite`와 전방 추론 연산 `refl`, `symm`, `trans`, `congr`, `subst`를 둔다.         |
+| 생성되는 규칙        | 모든 전술은 $=\mathrm{I}$와 $=\mathrm{E}$(그리고 기존 규칙)만 생성한다. 대칭 등은 [logic-spec.md §13.5](logic-spec.md#135-파생-규칙)처럼 전개한다. |
+| 출현 위치            | `rewrite`, `subst`는 항 $t$의 모든 자유 출현을 바꾼다. 일부만 바꾸려면 `subst`에 동기를 직접 준다.      |
+
+### 13.2. 등식 명제
+
+```python
+from axiomweave import Eq, ForAll, Ne, Prop, Theory, Var
+
+thy = Theory("demo.eq")
+U = thy.sort("U")
+f = thy.const("f", [U], U)
+x, y = Var("x", U), Var("y", U)
+
+ForAll([x, y], Eq(x, y) >> Eq(f(x), f(y)))
+```
+
+| API          | 의미                                           |
+| ------------ | ---------------------------------------------- |
+| `Eq(t, u)`   | $t = u$. `t.sort != u.sort`이면 `AxwTypeError` |
+| `Ne(t, u)`   | $\lnot(t = u)$, 즉 $(t = u) \to \bot$          |
+
+- `str(Eq(t, u))`는 `t = u`이다. `=`의 우선순위는 술어 적용과 같다 (괄호가 필요 없다).
+- `Eq`의 인자가 `Term`이 아니면 (예: `Prop`) `AxwTypeError`를 일으켜야 한다.
+
+### 13.3. 전술
+
+**목표 전술**
+
+| 전술                              | 현재 목표          | 결과                                                                                       |
+| --------------------------------- | ------------------ | ------------------------------------------------------------------------------------------ |
+| `ctx.rfl()`                       | $t = t$            | 목표를 닫음                                                                                |
+| `ctx.rewrite(f, reverse=False)`   | 임의의 $G$, $f : t = u$ | $G$의 $t$의 자유 출현을 모두 $u$로 바꾼 목표 $G'$로 바꿈. `reverse=True`이면 $u$를 $t$로 바꿈 |
+
+- `rewrite`할 항이 목표에 자유롭게 나타나지 않으면 `TacticError`를 일으켜야 한다.
+- `rewrite`는 새 목표 $G'$의 증명으로부터 $G$를 얻으므로, 방향을 맞추기 위해 대칭을 한 번 전개한다 ([13.4](#134-elaboration)).
+
+**전방 추론 연산**
+
+| 연산                                    | 인자                                           | 결과                         |
+| --------------------------------------- | ---------------------------------------------- | ---------------------------- |
+| `ctx.refl(t)`                           | 항 $t$                                         | $t = t$                      |
+| `ctx.symm(f)`                           | $f : t = u$                                    | $u = t$                      |
+| `ctx.trans(f, g)`                       | $f : t = u$, $g : u = v$                       | $t = v$                      |
+| `ctx.congr(f, (x, s))`                  | $f : t = u$, 변수 $x$와 항 $s$                 | $s[t/x] = s[u/x]$            |
+| `ctx.subst(f, g, motive=None)`          | $f : t = u$, $g : A$                           | $A$의 $t$를 $u$로 바꾼 명제   |
+
+- `subst`에 `motive=(x, A)`를 주면 $g$는 $A[t/x]$를 증명해야 하며, 결과는 $A[u/x]$이다. 주지 않으면 $g$의 명제에서 $t$의 모든 자유 출현을 새 변수로 추상한 것을 동기로 쓴다.
+- `trans`에서 $f$의 오른쪽과 $g$의 왼쪽이 같지 않으면, `congr`에서 `x`가 변수가 아니거나 `s`와 종이 맞지 않으면 `TacticError`를 일으켜야 한다.
+- 인자 항과 동기는 [12.5](#125-증명-문맥의-확장)의 범위 규칙을 따른다.
+
+**자유 출현.** 명제 $A$에서 항 $t$의 자유 출현은 $A$의 부분 항 중 $t$와 같고, 그 위치에서 $t$의 자유 변수가 어느 바인더에도 속박되지 않은 것이다. 추상은 그 위치들을 바인더에 속박되지 않는 새 변수로 바꾼다.
+
+### 13.4. Elaboration
+
+[12.6](#126-elaboration)에 다음을 더한다.
+
+| DSL 연산        | 생성되는 규칙 적용                                                                           |
+| --------------- | -------------------------------------------------------------------------------------------- |
+| `rfl`, `refl`   | $=\mathrm{I}$                                                                                |
+| `symm`          | $=\mathrm{E}$ (동기 $\lambda z.\, z = t$, $f$, $=\mathrm{I}\ t$)                           |
+| `trans`         | $=\mathrm{E}$ (동기 $\lambda z.\, t = z$, $g$, $f$)                                         |
+| `congr`         | $=\mathrm{E}$ (동기 $\lambda z.\, s[t/x] = s[z/x]$, $f$, $=\mathrm{I}\ s[t/x]$)            |
+| `subst`         | $=\mathrm{E}$ (동기, $f$, $g$)                                                               |
+| `rewrite`       | $=\mathrm{E}$ (동기 $G$의 추상, `symm` $f$, 새 목표). `reverse=True`이면 `symm` 없이 $f$     |
+
+- 번들의 `fragment`는 환경의 명제나 도출에 등식(`eq`, `eq_refl`, `eq_e`)이 하나라도 있으면 `"L2"`이고, 그렇지 않으면 [12.6](#126-elaboration)의 규칙을 따른다. 따라서 등식을 쓰지 않는 L1 Theory의 인증서는 바뀌지 않는다.
+
+### 13.5. 예제
+
+예제는 비규범적이다.
+
+```python
+from axiomweave import Eq, ForAll, Prop, Theory, Var
+
+thy = Theory("demo.eq")
+U = thy.sort("U")
+f = thy.const("f", [U], U)
+Even = thy.const("Even", [U], Prop)
+x, y, z = Var("x", U), Var("y", U), Var("z", U)
+
+
+@thy.theorem
+def eq_symm() -> Prop:
+    return ForAll([x, y], Eq(x, y) >> Eq(y, x))
+
+
+@thy.proof(eq_symm)
+def _(ctx):
+    ctx.intro()
+    ctx.intro()
+    h = ctx.intro()
+    ctx.exact(ctx.symm(h))
+
+
+@thy.theorem
+def even_congr() -> Prop:
+    return ForAll([x, y], Eq(x, y) >> (Even(f(x)) >> Even(f(y))))
+
+
+@thy.proof(even_congr)
+def _(ctx):
+    ctx.intro()
+    ctx.intro()
+    h = ctx.intro()
+    he = ctx.intro()
+    ctx.rewrite(h, reverse=True)     # 목표: Even(f(x))
+    ctx.exact(he)
+
+
+@thy.theorem
+def eq_trans() -> Prop:
+    return ForAll([x, y, z], Eq(x, y) >> (Eq(y, z) >> Eq(x, z)))
+
+
+@thy.proof(eq_trans)
+def _(ctx):
+    ctx.intro(); ctx.intro(); ctx.intro()
+    h1 = ctx.intro()
+    h2 = ctx.intro()
+    ctx.exact(ctx.trans(h1, h2))
+```
+
+| 오류 예                                              | 결과                                             |
+| ---------------------------------------------------- | ------------------------------------------------ |
+| 종이 다른 두 항으로 `Eq(a, b)`                       | `AxwTypeError`                                   |
+| `Eq(Prop.symbol("P"), Prop.symbol("Q"))`             | `AxwTypeError`                                   |
+| 목표가 $f(a) = a$일 때 `ctx.rfl()`                   | `TacticError`                                    |
+| 목표에 없는 항으로 `ctx.rewrite(h)`                   | `TacticError`                                    |
+| `ctx.trans(f, g)`에서 가운데 항이 다름               | `TacticError`                                    |
+
+## 14. 확장 시 유의 사항
+
+이 절은 L3 이후 개정을 위한 비규범적 메모이다.
+
+- 매개변수를 받는 정리 선언(README §4.3)은 L1·L2에 포함하지 않았다. 도입한다면 `def t(x: U)`의 매개변수를 전칭 양화로 해석하고, 정리의 적용 `t(a)`를 `ctx.spec`으로 Elaboration하는 방식을 검토한다. `@thy.definition`의 본문을 실행하지 않고 제한된 구문으로 변환하는 방식(proposal §5.5)도 함께 검토한다.
+- `unfold`, `induction` 등 전술과 자동화 전술은 해당 논리 단편이 도입된 뒤 이 문서에 추가한다. 자동화 전술도 이 문서의 전술과 마찬가지로 [7.1](#71-대응-규칙), [12.6](#126-elaboration), [13.4](#134-elaboration)의 규칙 적용만 생성해야 한다.
 - 정적 린트 도구는 [4.5](#45-연산자-우선순위와-괄호-규칙)의 괄호 규칙 위반을 Python AST에서 검출할 수 있다.
