@@ -1,31 +1,31 @@
 # AxiomWeave 언어 명세 (Language Specification)
 
-> **문서 상태:** 초안(Draft) · 단편 L0 · 대상 버전 v0.1  
+> **문서 상태:** 초안(Draft) · 단편 L0 · 대상 버전 v0.1 · L1 개정안([§12](#12-단편-l1-dsl-개정안)) 검토 대기  
 > 상위 문서: [specification.md](specification.md), 논리 규칙: [logic-spec.md](logic-spec.md). 이 문서는 v0.1 Python 임베디드 DSL의 표면 문법, 선언과 증명 작성 방식, 커널 입력으로의 변환(Elaboration)을 정의한다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위
 
-| 포함                                              | 제외                                                          |
-| ------------------------------------------------- | ------------------------------------------------------------- |
-| L0 명제의 Python 표현 (`Prop`, 연산자, 생성 함수) | `ForAll`, `Exists`, `Real`, `Symbol` 등 L1 이후 구성 요소      |
-| `Theory` 객체를 통한 공리·정리·증명 선언          | 독립 `.axw` 문법과 파서                                       |
+| 포함                                              | 제외                                                            |
+| ------------------------------------------------- | --------------------------------------------------------------- |
+| L0 명제의 Python 표현 (`Prop`, 연산자, 생성 함수) | `ForAll`, `Exists`, `Real`, `Symbol` 등 L1 이후 구성 요소       |
+| `Theory` 객체를 통한 공리·정리·증명 선언          | 독립 `.axw` 문법과 파서                                         |
 | 증명 문맥(`ctx`)의 목표 전술과 전방 추론 연산     | `rewrite`, `unfold`, `induction`, `ring`, `linarith`, `auto` 등 |
-| Elaboration 규칙과 검증 상태 전이                 | 증명 객체·인증서의 인코딩 (`kernel-spec.md`)                  |
-| 진단 메시지와 예외 분류                           | 외부 백엔드, AxiomAI, Jupyter·IDE 연계                        |
+| Elaboration 규칙과 검증 상태 전이                 | 증명 객체·인증서의 인코딩 (`kernel-spec.md`)                    |
+| 진단 메시지와 예외 분류                           | 외부 백엔드, AxiomAI, Jupyter·IDE 연계                          |
 
 README §4와 `proposal.md` §5의 예제 중 이 문서와 다른 부분은 설계 방향을 보여주는 비규범적 예시이다. v0.1 동작은 이 문서를 따른다.
 
 ## 2. 설계 결정 요약
 
-| 항목              | 결정                                                                                           |
-| ----------------- | ---------------------------------------------------------------------------------------------- |
-| 신뢰 수준         | DSL 전체는 비신뢰 계층이다. DSL이 무엇을 하든 최종 판정은 커널이 한다.                         |
-| 환경 노출         | 명시적 `Theory` 객체를 사용한다. 전역 정리 레지스트리를 두지 않는다.                          |
-| 증명 작성 방식    | 혼합형. 목표 기반 전술과, 사실(`Fact`)을 조합하는 전방 추론 연산을 함께 제공한다.             |
-| 검증 시점         | 데코레이터는 등록만 한다. `Theory.check()` 또는 `axw check` 호출 시 선언 순서대로 검증한다.    |
-| 함의 연산자       | `>>`를 유지하되 괄호 사용을 규정하고, 우결합 가변 인자 `Implies(A, B, C, …)`를 제공한다.        |
-| 축약 표기         | `Not`, `Truth`, `Iff`, `~`는 생성 시점에 원시 연산자로 전개된 `Prop`을 반환한다.               |
-| 명제의 `==`       | 구조적 동일성(bool)이다. 수학적 등식은 L2의 `Eq()`로만 표현한다.                               |
+| 항목           | 결정                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------- |
+| 신뢰 수준      | DSL 전체는 비신뢰 계층이다. DSL이 무엇을 하든 최종 판정은 커널이 한다.                      |
+| 환경 노출      | 명시적 `Theory` 객체를 사용한다. 전역 정리 레지스트리를 두지 않는다.                        |
+| 증명 작성 방식 | 혼합형. 목표 기반 전술과, 사실(`Fact`)을 조합하는 전방 추론 연산을 함께 제공한다.           |
+| 검증 시점      | 데코레이터는 등록만 한다. `Theory.check()` 또는 `axw check` 호출 시 선언 순서대로 검증한다. |
+| 함의 연산자    | `>>`를 유지하되 괄호 사용을 규정하고, 우결합 가변 인자 `Implies(A, B, C, …)`를 제공한다.    |
+| 축약 표기      | `Not`, `Truth`, `Iff`, `~`는 생성 시점에 원시 연산자로 전개된 `Prop`을 반환한다.            |
+| 명제의 `==`    | 구조적 동일성(bool)이다. 수학적 등식은 L2의 `Eq()`로만 표현한다.                            |
 
 ## 3. 신뢰 경계
 
@@ -46,10 +46,10 @@ README §4와 `proposal.md` §5의 예제 중 이 문서와 다른 부분은 설
 
 ### 4.2. 원자와 상수
 
-| API                    | 의미                                             |
-| ---------------------- | ------------------------------------------------ |
-| `Prop.symbol(name)`    | 이름이 `name`인 명제 원자                        |
-| `Falsehood`            | 거짓 명제 $\bot$                                 |
+| API                 | 의미                      |
+| ------------------- | ------------------------- |
+| `Prop.symbol(name)` | 이름이 `name`인 명제 원자 |
+| `Falsehood`         | 거짓 명제 $\bot$          |
 
 ```python
 from axiomweave import Prop
@@ -63,15 +63,15 @@ P, Q, R = (Prop.symbol(name) for name in ("P", "Q", "R"))
 
 ### 4.3. 생성 함수와 연산자
 
-| 논리       | 생성 함수                 | 연산자    | 결과 구조                      |
-| ---------- | ------------------------- | --------- | ------------------------------ |
-| $A \land B$ | `And(A, B)`              | `A & B`   | $\mathsf{and}\ A\ B$           |
-| $A \lor B$ | `Or(A, B)`                | `A \| B`  | $\mathsf{or}\ A\ B$            |
-| $A \to B$  | `Implies(A, B)`           | `A >> B`  | $\mathsf{imp}\ A\ B$           |
-| $A_1 \to \ldots \to A_n$ | `Implies(A₁, …, Aₙ)` | — | $\mathsf{imp}\ A_1\ (\mathsf{imp}\ A_2\ (\ldots\ A_n))$ (우결합) |
-| $\lnot A$  | `Not(A)`                  | `~A`      | $\mathsf{imp}\ A\ \bot$        |
-| $\top$     | `Truth`                   | —         | $\mathsf{imp}\ \bot\ \bot$     |
-| $A \leftrightarrow B$ | `Iff(A, B)`    | —         | $\mathsf{and}\ (\mathsf{imp}\ A\ B)\ (\mathsf{imp}\ B\ A)$ |
+| 논리                     | 생성 함수            | 연산자   | 결과 구조                                                        |
+| ------------------------ | -------------------- | -------- | ---------------------------------------------------------------- |
+| $A \land B$              | `And(A, B)`          | `A & B`  | $\mathsf{and}\ A\ B$                                             |
+| $A \lor B$               | `Or(A, B)`           | `A \| B` | $\mathsf{or}\ A\ B$                                              |
+| $A \to B$                | `Implies(A, B)`      | `A >> B` | $\mathsf{imp}\ A\ B$                                             |
+| $A_1 \to \ldots \to A_n$ | `Implies(A₁, …, Aₙ)` | —        | $\mathsf{imp}\ A_1\ (\mathsf{imp}\ A_2\ (\ldots\ A_n))$ (우결합) |
+| $\lnot A$                | `Not(A)`             | `~A`     | $\mathsf{imp}\ A\ \bot$                                          |
+| $\top$                   | `Truth`              | —        | $\mathsf{imp}\ \bot\ \bot$                                       |
+| $A \leftrightarrow B$    | `Iff(A, B)`          | —        | $\mathsf{and}\ (\mathsf{imp}\ A\ B)\ (\mathsf{imp}\ B\ A)$       |
 
 - `And`, `Or`, `Iff`는 정확히 두 인자를 받아야 한다. `Implies`는 두 개 이상의 인자를 받아야 한다.
 - 모든 인자와 피연산자는 `Prop`이어야 한다. Python `bool`, 숫자, 문자열 등은 자동 변환하지 않으며 `AxwTypeError`(또는 연산자의 경우 Python 기본 `TypeError`)를 일으켜야 한다. 특히 `True`/`False`를 `Truth`/`Falsehood`로 변환해서는 안 된다.
@@ -92,11 +92,11 @@ assert ~~P == Implies(Implies(P, Falsehood), Falsehood)
 
 Python의 연산자 우선순위는 `~` > `>>` > `&` > `|` 이며, 이항 연산자는 모두 좌결합이다. 이는 논리 표기 관례([logic-spec.md §3.5](logic-spec.md#35-표기-규약): $\land$ > $\lor$ > $\to$, $\to$ 우결합)와 다르다.
 
-| 작성한 코드        | Python이 구성하는 명제   | 의도했을 가능성이 높은 명제 |
-| ------------------ | ------------------------ | --------------------------- |
-| `P >> Q >> R`      | $(P \to Q) \to R$        | $P \to (Q \to R)$           |
-| `P & Q >> R`       | $P \land (Q \to R)$      | $(P \land Q) \to R$         |
-| `P >> Q \| R`      | $(P \to Q) \lor R$       | $P \to (Q \lor R)$          |
+| 작성한 코드   | Python이 구성하는 명제 | 의도했을 가능성이 높은 명제 |
+| ------------- | ---------------------- | --------------------------- |
+| `P >> Q >> R` | $(P \to Q) \to R$      | $P \to (Q \to R)$           |
+| `P & Q >> R`  | $P \land (Q \to R)$    | $(P \land Q) \to R$         |
+| `P >> Q \| R` | $(P \to Q) \lor R$     | $P \to (Q \lor R)$          |
 
 런타임에서는 괄호가 있었는지 구분할 수 없으므로 DSL은 위 차이를 검출할 수 없다. 사용자 코드는 다음 규칙을 따라야 한다.
 
@@ -127,10 +127,10 @@ from axiomweave import Theory
 thy = Theory("demo.logic", imports=[])
 ```
 
-| 매개변수  | 의미                                                         |
-| --------- | ------------------------------------------------------------ |
-| `name`    | 점으로 구분된 식별자. 선언의 정규 이름 접두사로 사용된다.     |
-| `imports` | 이 Theory보다 앞에 놓이는 다른 `Theory` 객체들의 목록         |
+| 매개변수  | 의미                                                      |
+| --------- | --------------------------------------------------------- |
+| `name`    | 점으로 구분된 식별자. 선언의 정규 이름 접두사로 사용된다. |
+| `imports` | 이 Theory보다 앞에 놓이는 다른 `Theory` 객체들의 목록     |
 
 - `Theory`의 선언 목록은 가져온 Theory의 선언들(가져온 순서, 전이적 포함, 같은 객체는 한 번만)과 이 Theory의 선언들(선언 순서)을 이어 붙인 것이다.
 - 커널에 전달되는 [logic-spec.md §7](logic-spec.md#7-환경)의 환경은 이 선언 목록에서 공리와 `VERIFIED` 정리만 순서대로 포함한다. `VERIFIED`가 아닌 정리는 환경에 들어가지 않으므로, 이를 참조하는 증명은 커널에서 거부된다.
@@ -179,10 +179,10 @@ def _(ctx):
 
 ### 5.5. 핸들
 
-| 핸들      | 주요 속성                                                          |
-| --------- | ------------------------------------------------------------------ |
+| 핸들      | 주요 속성                                                           |
+| --------- | ------------------------------------------------------------------- |
 | `Theorem` | `name`(정규 이름), `statement`(`Prop`), `status`, `axioms`(검증 후) |
-| `Axiom`   | `name`, `statement`                                                |
+| `Axiom`   | `name`, `statement`                                                 |
 
 - `Theorem.status`의 초기값은 `UNPROVEN`이며, [5.7](#57-검증-상태-전이)에 따라서만 바뀐다.
 - `Theorem.axioms`는 커널이 계산한 의존 공리의 정규 이름 집합이다 ([logic-spec.md §8.4](logic-spec.md#84-공리-의존성)). 검증 전에는 `None`이다.
@@ -203,22 +203,22 @@ report = thy.check(allowed_axioms=None)
 
 `CheckReport`는 다음을 제공해야 한다.
 
-| 속성/메서드     | 의미                                                    |
-| --------------- | ------------------------------------------------------- |
-| `ok`            | 모든 정리가 `VERIFIED`이면 `True`                       |
-| `results`       | 정리별 상태, 진단 목록, 의존 공리 (가져온 Theory의 정리를 포함한 환경 순서) |
-| `__str__`       | 사람이 읽을 수 있는 요약                                |
+| 속성/메서드 | 의미                                                                        |
+| ----------- | --------------------------------------------------------------------------- |
+| `ok`        | 모든 정리가 `VERIFIED`이면 `True`                                           |
+| `results`   | 정리별 상태, 진단 목록, 의존 공리 (가져온 Theory의 정리를 포함한 환경 순서) |
+| `__str__`   | 사람이 읽을 수 있는 요약                                                    |
 
 ### 5.7. 검증 상태 전이
 
-| 상황                                                    | 상태       | 진단 단계     |
-| ------------------------------------------------------- | ---------- | ------------- |
-| 증명 함수가 등록되지 않음                               | `UNPROVEN` | —             |
-| 증명 함수가 정상 종료했으나 닫히지 않은 목표가 남음     | `UNPROVEN` | elaboration   |
-| 증명 함수 실행 중 `AxwError` 또는 기타 Python 예외 발생 | `REJECTED` | elaboration   |
-| 증명 객체를 커널이 거부                                 | `REJECTED` | kernel        |
-| 허용되지 않은 공리로 환경이 거부됨                      | `REJECTED` | environment   |
-| 증명 객체를 커널이 수락                                 | `VERIFIED` | —             |
+| 상황                                                    | 상태       | 진단 단계   |
+| ------------------------------------------------------- | ---------- | ----------- |
+| 증명 함수가 등록되지 않음                               | `UNPROVEN` | —           |
+| 증명 함수가 정상 종료했으나 닫히지 않은 목표가 남음     | `UNPROVEN` | elaboration |
+| 증명 함수 실행 중 `AxwError` 또는 기타 Python 예외 발생 | `REJECTED` | elaboration |
+| 증명 객체를 커널이 거부                                 | `REJECTED` | kernel      |
+| 허용되지 않은 공리로 환경이 거부됨                      | `REJECTED` | environment |
+| 증명 객체를 커널이 수락                                 | `VERIFIED` | —           |
 
 - 앞선 정리가 `VERIFIED`가 아닌데 뒤의 증명이 그 정리를 사용하면, 뒤의 정리는 `REJECTED`가 되어야 한다 ([specification.md §5.5](specification.md#55-언어)).
 - `check()`를 다시 호출하면 모든 상태를 다시 계산한다.
@@ -227,12 +227,12 @@ report = thy.check(allowed_axioms=None)
 
 ### 6.1. 개념
 
-| 개념           | 의미                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| 목표 (Goal)    | 증명해야 할 명제와, 그 목표에서 사용할 수 있는 가정들의 문맥 $\Gamma$                         |
-| 목표 목록      | 아직 닫히지 않은 목표들의 순서 목록. 처음에는 정리의 명제 하나이며 문맥은 비어 있다.       |
-| 현재 목표      | 목표 목록의 첫 번째 목표. 목표 전술은 항상 현재 목표에 작용한다.                           |
-| 사실 (Fact)    | 어떤 문맥에서 도출된 명제를 나타내는 핸들. `fact.prop`으로 명제를 얻는다.                   |
+| 개념        | 의미                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------ |
+| 목표 (Goal) | 증명해야 할 명제와, 그 목표에서 사용할 수 있는 가정들의 문맥 $\Gamma$                |
+| 목표 목록   | 아직 닫히지 않은 목표들의 순서 목록. 처음에는 정리의 명제 하나이며 문맥은 비어 있다. |
+| 현재 목표   | 목표 목록의 첫 번째 목표. 목표 전술은 항상 현재 목표에 작용한다.                     |
+| 사실 (Fact) | 어떤 문맥에서 도출된 명제를 나타내는 핸들. `fact.prop`으로 명제를 얻는다.            |
 
 - `Fact`는 그것이 만들어진 문맥의 가정에만 의존한다. 현재 목표의 문맥이 그 가정들을 모두 포함할 때만 `Fact`를 사용할 수 있으며, 그렇지 않으면 `ScopeError`를 일으켜야 한다.
 - 전방 추론 연산은 가정을 해제하지 않으므로, 이 조건을 만족하는 `Fact`의 도출은 현재 목표의 문맥에서도 유효하다 (약화, [logic-spec.md §10](logic-spec.md#10-메타-성질)).
@@ -246,18 +246,18 @@ report = thy.check(allowed_axioms=None)
 
 ### 6.3. 목표 전술
 
-| 전술                         | 현재 목표 ($\Gamma \vdash \cdot$) | 결과                                                               |
-| ---------------------------- | -------------------- | ------------------------------------------------------------------------------- |
-| `ctx.intro(name=None)`       | $A \to B$            | 목표를 $\Gamma, h : A \vdash B$로 바꾸고 가정 $h$의 `Fact`를 반환               |
-| `ctx.split()`                | $A \land B$          | 목표를 $\Gamma \vdash A$, $\Gamma \vdash B$ 두 개로 바꿈 (이 순서)              |
-| `ctx.left()`                 | $A \lor B$           | 목표를 $\Gamma \vdash A$로 바꿈                                                 |
-| `ctx.right()`                | $A \lor B$           | 목표를 $\Gamma \vdash B$로 바꿈                                                 |
-| `ctx.cases(f, names=None)`   | 임의의 $C$, $f : A \lor B$ | 목표를 $\Gamma, h_1 : A \vdash C$, $\Gamma, h_2 : B \vdash C$ 두 개로 바꾸고 ($h_1$의 `Fact`, $h_2$의 `Fact`) 반환 |
-| `ctx.exfalso()`              | 임의의 $A$           | 목표를 $\Gamma \vdash \bot$로 바꿈                                              |
-| `ctx.apply(f)`               | $B$, $f : A_1 \to \ldots \to A_n \to B$ ($n \ge 1$) | 목표를 $\Gamma \vdash A_1$, …, $\Gamma \vdash A_n$로 바꿈 |
-| `ctx.exact(f)`               | $A$, `f.prop == A`   | 현재 목표를 닫음                                                                 |
-| `ctx.assumption()`           | $A$                  | $\Gamma$에 $A$와 같은 가정이 있으면 가장 최근의 것으로 목표를 닫음              |
-| `ctx.have(A, name=None)`     | 임의의 $B$           | 목표를 $\Gamma \vdash A$, $\Gamma, h : A \vdash B$ 두 개로 바꾸고 가정 $h$의 `Fact`를 반환 |
+| 전술                       | 현재 목표 ($\Gamma \vdash \cdot$)                   | 결과                                                                                                               |
+| -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `ctx.intro(name=None)`     | $A \to B$                                           | 목표를 $\Gamma, h : A \vdash B$로 바꾸고 가정 $h$의 `Fact`를 반환                                                  |
+| `ctx.split()`              | $A \land B$                                         | 목표를 $\Gamma \vdash A$, $\Gamma \vdash B$ 두 개로 바꿈 (이 순서)                                                 |
+| `ctx.left()`               | $A \lor B$                                          | 목표를 $\Gamma \vdash A$로 바꿈                                                                                    |
+| `ctx.right()`              | $A \lor B$                                          | 목표를 $\Gamma \vdash B$로 바꿈                                                                                    |
+| `ctx.cases(f, names=None)` | 임의의 $C$, $f : A \lor B$                          | 목표를 $\Gamma, h_1 : A \vdash C$, $\Gamma, h_2 : B \vdash C$ 두 개로 바꾸고 ($h_1$의 `Fact`, $h_2$의 `Fact`) 반환 |
+| `ctx.exfalso()`            | 임의의 $A$                                          | 목표를 $\Gamma \vdash \bot$로 바꿈                                                                                 |
+| `ctx.apply(f)`             | $B$, $f : A_1 \to \ldots \to A_n \to B$ ($n \ge 1$) | 목표를 $\Gamma \vdash A_1$, …, $\Gamma \vdash A_n$로 바꿈                                                          |
+| `ctx.exact(f)`             | $A$, `f.prop == A`                                  | 현재 목표를 닫음                                                                                                   |
+| `ctx.assumption()`         | $A$                                                 | $\Gamma$에 $A$와 같은 가정이 있으면 가장 최근의 것으로 목표를 닫음                                                 |
+| `ctx.have(A, name=None)`   | 임의의 $B$                                          | 목표를 $\Gamma \vdash A$, $\Gamma, h : A \vdash B$ 두 개로 바꾸고 가정 $h$의 `Fact`를 반환                         |
 
 - 현재 목표의 형태가 표의 조건과 맞지 않으면 `TacticError`를 일으켜야 한다.
 - `apply`는 `f.prop`을 오른쪽으로 펼쳐 결론이 현재 목표와 같아지는 가장 짧은 $n$을 사용한다. 그런 $n$이 없으면 `TacticError`를 일으켜야 한다.
@@ -267,16 +267,16 @@ report = thy.check(allowed_axioms=None)
 
 다음 연산은 목표 목록을 바꾸지 않고 새 `Fact`를 반환한다. 결과 `Fact`의 문맥은 인자 `Fact`들의 문맥 중 가장 큰 것이며, 인자들의 문맥이 서로 포함 관계가 아니면 `ScopeError`를 일으켜야 한다.
 
-| 연산                              | 인자                         | 결과        |
-| --------------------------------- | ---------------------------- | ----------- |
-| `ctx.mp(f, g)`                    | $f : A \to B$, $g : A$       | $B$         |
-| `ctx.and_intro(f, g)`             | $f : A$, $g : B$             | $A \land B$ |
-| `ctx.and_left(f)`                 | $f : A \land B$              | $A$         |
-| `ctx.and_right(f)`                | $f : A \land B$              | $B$         |
-| `ctx.or_inl(f, B)`                | $f : A$, $B : \texttt{Prop}$ | $A \lor B$  |
-| `ctx.or_inr(A, f)`                | $A : \texttt{Prop}$, $f : B$ | $A \lor B$  |
-| `ctx.absurd(f, A)`                | $f : \bot$, $A : \texttt{Prop}$ | $A$      |
-| `ctx.thm(decl, subst=None)`       | `Theorem` 또는 `Axiom`, 치환 | $\texttt{decl.statement}[\sigma]$ |
+| 연산                        | 인자                            | 결과                              |
+| --------------------------- | ------------------------------- | --------------------------------- |
+| `ctx.mp(f, g)`              | $f : A \to B$, $g : A$          | $B$                               |
+| `ctx.and_intro(f, g)`       | $f : A$, $g : B$                | $A \land B$                       |
+| `ctx.and_left(f)`           | $f : A \land B$                 | $A$                               |
+| `ctx.and_right(f)`          | $f : A \land B$                 | $B$                               |
+| `ctx.or_inl(f, B)`          | $f : A$, $B : \texttt{Prop}$    | $A \lor B$                        |
+| `ctx.or_inr(A, f)`          | $A : \texttt{Prop}$, $f : B$    | $A \lor B$                        |
+| `ctx.absurd(f, A)`          | $f : \bot$, $A : \texttt{Prop}$ | $A$                               |
+| `ctx.thm(decl, subst=None)` | `Theorem` 또는 `Axiom`, 치환    | $\texttt{decl.statement}[\sigma]$ |
 
 - 인자의 명제 형태가 맞지 않으면 `TacticError`를 일으켜야 한다.
 - `ctx.thm`의 `subst`는 원자 `Prop`을 키로, `Prop`을 값으로 하는 `dict`이다. 예: `ctx.thm(and_comm, {P: A | B, Q: C})`. 키가 원자가 아니거나 `decl.statement`에 없는 원자이면 `TacticError`를 일으켜야 한다 ([logic-spec.md §6.3](logic-spec.md#63-인스턴스화-조건)).
@@ -296,10 +296,10 @@ with ctx.focus():
 
 ### 6.6. 증명 상태 조회
 
-| API                | 의미                                                    |
-| ------------------ | ------------------------------------------------------- |
-| `ctx.goals`        | 현재 목표 목록 (각 목표의 문맥과 명제를 읽기 전용으로 제공) |
-| `str(ctx)`         | 목표 목록의 사람이 읽을 수 있는 표시                    |
+| API         | 의미                                                        |
+| ----------- | ----------------------------------------------------------- |
+| `ctx.goals` | 현재 목표 목록 (각 목표의 문맥과 명제를 읽기 전용으로 제공) |
+| `str(ctx)`  | 목표 목록의 사람이 읽을 수 있는 표시                        |
 
 `str(ctx)`의 형식은 다음을 권장한다.
 
@@ -318,22 +318,22 @@ Elaboration은 증명 함수의 실행 기록을 [logic-spec.md §8](logic-spec.
 
 ### 7.1. 대응 규칙
 
-| DSL 연산                  | 생성되는 규칙 적용                                                     |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `intro`                   | $\to\mathrm{I}$ (가정 이름, 가정 명제 $A$)                              |
-| 가정 `Fact`의 사용        | $\mathrm{Hyp}$ (가정 이름)                                              |
-| `split`, `and_intro`      | $\land\mathrm{I}$                                                       |
-| `and_left`, `and_right`   | $\land\mathrm{E}_1$, $\land\mathrm{E}_2$                                |
-| `left`, `or_inl`          | $\lor\mathrm{I}_1$ (추가되는 오른쪽 명제)                               |
-| `right`, `or_inr`         | $\lor\mathrm{I}_2$ (추가되는 왼쪽 명제)                                 |
-| `cases`                   | $\lor\mathrm{E}$ (가정 이름 $h_1$, $h_2$)                               |
-| `exfalso`, `absurd`       | $\bot\mathrm{E}$ (결론 명제)                                            |
-| `mp`                      | $\to\mathrm{E}$                                                         |
-| `apply` ($n$개 전제)      | $\to\mathrm{E}$를 $n$번                                                 |
-| `have A`                  | $\to\mathrm{E}$ ($\to\mathrm{I}$ ($h : A$)로 만든 $A \to B$의 도출, $A$의 도출) |
-| `thm` (정리)              | $\mathrm{Thm}$ (정규 이름, 치환)                                        |
-| `thm` (공리)              | $\mathrm{Ax}$ (정규 이름, 치환)                                         |
-| `exact`, `assumption`     | 새 규칙 없음. `Fact`의 도출 또는 $\mathrm{Hyp}$을 목표 자리에 연결      |
+| DSL 연산                | 생성되는 규칙 적용                                                              |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| `intro`                 | $\to\mathrm{I}$ (가정 이름, 가정 명제 $A$)                                      |
+| 가정 `Fact`의 사용      | $\mathrm{Hyp}$ (가정 이름)                                                      |
+| `split`, `and_intro`    | $\land\mathrm{I}$                                                               |
+| `and_left`, `and_right` | $\land\mathrm{E}_1$, $\land\mathrm{E}_2$                                        |
+| `left`, `or_inl`        | $\lor\mathrm{I}_1$ (추가되는 오른쪽 명제)                                       |
+| `right`, `or_inr`       | $\lor\mathrm{I}_2$ (추가되는 왼쪽 명제)                                         |
+| `cases`                 | $\lor\mathrm{E}$ (가정 이름 $h_1$, $h_2$)                                       |
+| `exfalso`, `absurd`     | $\bot\mathrm{E}$ (결론 명제)                                                    |
+| `mp`                    | $\to\mathrm{E}$                                                                 |
+| `apply` ($n$개 전제)    | $\to\mathrm{E}$를 $n$번                                                         |
+| `have A`                | $\to\mathrm{E}$ ($\to\mathrm{I}$ ($h : A$)로 만든 $A \to B$의 도출, $A$의 도출) |
+| `thm` (정리)            | $\mathrm{Thm}$ (정규 이름, 치환)                                                |
+| `thm` (공리)            | $\mathrm{Ax}$ (정규 이름, 치환)                                                 |
+| `exact`, `assumption`   | 새 규칙 없음. `Fact`의 도출 또는 $\mathrm{Hyp}$을 목표 자리에 연결              |
 
 - 위 표 외의 규칙 적용을 생성해서는 안 된다.
 - 생성한 도출은 커널이 결론을 재계산할 수 있도록 [logic-spec.md §8.5](logic-spec.md#85-결론-재계산에-필요한-정보-참고)의 정보를 포함해야 한다.
@@ -351,13 +351,13 @@ Elaboration은 증명 함수의 실행 기록을 [logic-spec.md §8](logic-spec.
 
 ## 9. 예외와 진단
 
-| 예외                | 기반 클래스 | 발생 상황                                               |
-| ------------------- | ----------- | ------------------------------------------------------- |
-| `AxwError`          | `Exception` | 모든 AxiomWeave 오류의 기반                             |
-| `AxwTypeError`      | `AxwError`, `TypeError` | 잘못된 명제 구성, `Prop`의 진릿값 변환       |
-| `DeclarationError`  | `AxwError`  | 잘못된 선언, 이름 중복, 증명 중복 등록, 선언 순서 위반 |
-| `TacticError`       | `AxwError`  | 목표 형태 불일치, 가정 이름 중복, 닫히지 않은 `focus`   |
-| `ScopeError`        | `AxwError`  | 범위를 벗어난 `Fact` 사용                               |
+| 예외               | 기반 클래스             | 발생 상황                                              |
+| ------------------ | ----------------------- | ------------------------------------------------------ |
+| `AxwError`         | `Exception`             | 모든 AxiomWeave 오류의 기반                            |
+| `AxwTypeError`     | `AxwError`, `TypeError` | 잘못된 명제 구성, `Prop`의 진릿값 변환                 |
+| `DeclarationError` | `AxwError`              | 잘못된 선언, 이름 중복, 증명 중복 등록, 선언 순서 위반 |
+| `TacticError`      | `AxwError`              | 목표 형태 불일치, 가정 이름 중복, 닫히지 않은 `focus`  |
+| `ScopeError`       | `AxwError`              | 범위를 벗어난 `Fact` 사용                              |
 
 진단 정보는 최소한 다음을 포함해야 한다.
 
@@ -378,11 +378,11 @@ v0.1 패키지는 [logic-spec.md §9](logic-spec.md#9-고전-원리)의 고전 �
 from axiomweave.lib.logic.classical import classical, em, dne, peirce
 ```
 
-| 핸들     | 종류      | 정규 이름           | 명제 (원자 `P`, `Q`)       |
-| -------- | --------- | ------------------- | -------------------------- |
-| `em`     | `Axiom`   | `classical.em`      | `P \| ~P`                  |
-| `dne`    | `Theorem` | `classical.dne`     | `~~P >> P`                 |
-| `peirce` | `Theorem` | `classical.peirce`  | `((P >> Q) >> P) >> P`     |
+| 핸들     | 종류      | 정규 이름          | 명제 (원자 `P`, `Q`)   |
+| -------- | --------- | ------------------ | ---------------------- |
+| `em`     | `Axiom`   | `classical.em`     | `P \| ~P`              |
+| `dne`    | `Theorem` | `classical.dne`    | `~~P >> P`             |
+| `peirce` | `Theorem` | `classical.peirce` | `((P >> Q) >> P) >> P` |
 
 - `dne`와 `peirce`는 `em`으로부터 증명되어야 한다.
 - 이 Theory를 가져오지 않은 Theory의 정리는 고전 원리에 의존할 수 없다.
@@ -400,42 +400,42 @@ from axiomweave.lib.logic.propositional import propositional, and_comm, iff_tran
 - 모듈은 아래 표의 각 정리를 같은 이름의 `Theorem` 핸들로 노출해야 하며, 선언 순서는 표의 순서이다. 뒤의 정리의 증명은 앞의 정리를 사용할 수 있다.
 - 고전 원리가 필요한 법칙(예: $\lnot(P \land Q) \to \lnot P \lor \lnot Q$)은 이 Theory에 넣어서는 안 된다.
 
-| 분류     | 핸들                 | 명제 (DSL 표기)                                    |
-| -------- | -------------------- | -------------------------------------------------- |
-| 함의     | `imp_refl`           | `P >> P`                                           |
-|          | `imp_const`          | `Implies(P, Q, P)`                                 |
-|          | `imp_trans`          | `Implies(P >> Q, Q >> R, P >> R)`                  |
-|          | `imp_swap`           | `Implies(P, Q, R) >> Implies(Q, P, R)`             |
-|          | `imp_distrib`        | `Implies(Implies(P, Q, R), P >> Q, P >> R)`        |
-| 논리곱   | `and_intro`          | `Implies(P, Q, P & Q)`                             |
-|          | `and_left`           | `(P & Q) >> P`                                     |
-|          | `and_right`          | `(P & Q) >> Q`                                     |
-|          | `and_comm`           | `(P & Q) >> (Q & P)`                               |
-|          | `and_assoc`          | `Iff((P & Q) & R, P & (Q & R))`                    |
-|          | `and_self`           | `Iff(P & P, P)`                                    |
-| 논리합   | `or_inl`             | `P >> (P \| Q)`                                    |
-|          | `or_inr`             | `Q >> (P \| Q)`                                    |
-|          | `or_elim`            | `Implies(P \| Q, P >> R, Q >> R, R)`               |
-|          | `or_comm`            | `(P \| Q) >> (Q \| P)`                             |
-|          | `or_assoc`           | `Iff((P \| Q) \| R, P \| (Q \| R))`                |
-|          | `or_self`            | `Iff(P \| P, P)`                                   |
-| 분배·커링 | `and_or_distrib`    | `Iff(P & (Q \| R), (P & Q) \| (P & R))`            |
-|          | `or_and_distrib`     | `Iff(P \| (Q & R), (P \| Q) & (P \| R))`           |
-|          | `curry`              | `Iff((P & Q) >> R, Implies(P, Q, R))`              |
-|          | `or_imp`             | `Iff((P \| Q) >> R, (P >> R) & (Q >> R))`          |
-| 부정     | `false_elim`         | `Falsehood >> P`                                   |
-|          | `truth_intro`        | `Truth`                                            |
-|          | `explosion`          | `Implies(~P, P, Q)`                                |
-|          | `not_contradiction`  | `~(P & ~P)`                                        |
-|          | `contrapositive`     | `(P >> Q) >> (~Q >> ~P)`                           |
-|          | `dni`                | `P >> ~~P`                                         |
-|          | `tne`                | `Iff(~~~P, ~P)`                                    |
-|          | `not_not_em`         | `~~(P \| ~P)`                                      |
-|          | `not_or`             | `Iff(~(P \| Q), ~P & ~Q)`                          |
-|          | `not_and_of_or_not`  | `(~P \| ~Q) >> ~(P & Q)`                           |
-| 동치     | `iff_refl`           | `Iff(P, P)`                                        |
-|          | `iff_symm`           | `Iff(P, Q) >> Iff(Q, P)`                           |
-|          | `iff_trans`          | `Implies(Iff(P, Q), Iff(Q, R), Iff(P, R))`         |
+| 분류      | 핸들                | 명제 (DSL 표기)                             |
+| --------- | ------------------- | ------------------------------------------- |
+| 함의      | `imp_refl`          | `P >> P`                                    |
+|           | `imp_const`         | `Implies(P, Q, P)`                          |
+|           | `imp_trans`         | `Implies(P >> Q, Q >> R, P >> R)`           |
+|           | `imp_swap`          | `Implies(P, Q, R) >> Implies(Q, P, R)`      |
+|           | `imp_distrib`       | `Implies(Implies(P, Q, R), P >> Q, P >> R)` |
+| 논리곱    | `and_intro`         | `Implies(P, Q, P & Q)`                      |
+|           | `and_left`          | `(P & Q) >> P`                              |
+|           | `and_right`         | `(P & Q) >> Q`                              |
+|           | `and_comm`          | `(P & Q) >> (Q & P)`                        |
+|           | `and_assoc`         | `Iff((P & Q) & R, P & (Q & R))`             |
+|           | `and_self`          | `Iff(P & P, P)`                             |
+| 논리합    | `or_inl`            | `P >> (P \| Q)`                             |
+|           | `or_inr`            | `Q >> (P \| Q)`                             |
+|           | `or_elim`           | `Implies(P \| Q, P >> R, Q >> R, R)`        |
+|           | `or_comm`           | `(P \| Q) >> (Q \| P)`                      |
+|           | `or_assoc`          | `Iff((P \| Q) \| R, P \| (Q \| R))`         |
+|           | `or_self`           | `Iff(P \| P, P)`                            |
+| 분배·커링 | `and_or_distrib`    | `Iff(P & (Q \| R), (P & Q) \| (P & R))`     |
+|           | `or_and_distrib`    | `Iff(P \| (Q & R), (P \| Q) & (P \| R))`    |
+|           | `curry`             | `Iff((P & Q) >> R, Implies(P, Q, R))`       |
+|           | `or_imp`            | `Iff((P \| Q) >> R, (P >> R) & (Q >> R))`   |
+| 부정      | `false_elim`        | `Falsehood >> P`                            |
+|           | `truth_intro`       | `Truth`                                     |
+|           | `explosion`         | `Implies(~P, P, Q)`                         |
+|           | `not_contradiction` | `~(P & ~P)`                                 |
+|           | `contrapositive`    | `(P >> Q) >> (~Q >> ~P)`                    |
+|           | `dni`               | `P >> ~~P`                                  |
+|           | `tne`               | `Iff(~~~P, ~P)`                             |
+|           | `not_not_em`        | `~~(P \| ~P)`                               |
+|           | `not_or`            | `Iff(~(P \| Q), ~P & ~Q)`                   |
+|           | `not_and_of_or_not` | `(~P \| ~Q) >> ~(P & Q)`                    |
+| 동치      | `iff_refl`          | `Iff(P, P)`                                 |
+|           | `iff_symm`          | `Iff(P, Q) >> Iff(Q, P)`                    |
+|           | `iff_trans`         | `Implies(Iff(P, Q), Iff(Q, R), Iff(P, R))`  |
 
 - `and_intro`, `and_left`, `or_inl` 등은 증명 문맥의 같은 이름 전방 추론 연산([6.4](#64-전방-추론-연산))과 이름이 같지만, 이 표의 핸들은 `ctx.thm`으로 사용하는 정리이다.
 - 표는 v0.1의 최소 집합이다. 정리를 추가할 때는 이 표에 먼저 추가하고, 기존 정리의 이름·명제·순서를 바꾸지 않는 것을 권장한다. 정리의 선언 해시가 바뀌면 그 정리를 참조하는 기존 인증서는 재검증되지 않는다.
@@ -570,21 +570,210 @@ report = cthy.check()  # dne_again.axioms == {"classical.em"}
 
 ### 11.7. 오류 예
 
-| 코드                                         | 결과                                                    |
-| -------------------------------------------- | ------------------------------------------------------- |
-| `if P: ...`                                  | `AxwTypeError` (진릿값 변환)                            |
-| `P & True`                                   | `TypeError` (`Prop`이 아닌 피연산자)                    |
-| 목표가 $P \land Q$일 때 `ctx.intro()`        | `TacticError` (목표 형태 불일치)                        |
-| 11.3에서 첫 번째 `focus` 안에서 `hq` 사용    | `ScopeError` (`hq`는 두 번째 목표의 가정)               |
+| 코드                                         | 결과                                                          |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| `if P: ...`                                  | `AxwTypeError` (진릿값 변환)                                  |
+| `P & True`                                   | `TypeError` (`Prop`이 아닌 피연산자)                          |
+| 목표가 $P \land Q$일 때 `ctx.intro()`        | `TacticError` (목표 형태 불일치)                              |
+| 11.3에서 첫 번째 `focus` 안에서 `hq` 사용    | `ScopeError` (`hq`는 두 번째 목표의 가정)                     |
 | `ctx.thm(and_comm, {R: C})`                  | `TacticError` ($R \notin \mathrm{atoms}(\mathit{statement})$) |
-| 증명 함수가 `split()` 후 첫 목표만 닫고 반환 | 정리 상태 `UNPROVEN`                                    |
-| `ctx.thm(t)`에서 `t`가 뒤에 선언된 정리      | `DeclarationError` (선언 순서 위반)                     |
+| 증명 함수가 `split()` 후 첫 목표만 닫고 반환 | 정리 상태 `UNPROVEN`                                          |
+| `ctx.thm(t)`에서 `t`가 뒤에 선언된 정리      | `DeclarationError` (선언 순서 위반)                           |
 
-## 12. 확장 시 유의 사항
+## 12. 단편 L1 DSL (개정안)
 
-이 절은 L1 이후 개정을 위한 비규범적 메모이다.
+> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 [logic-spec.md §12](logic-spec.md#12-단편-l1-일차-술어-논리-개정안)의 L1을 Python DSL로 표현하는 방법을 정의한다. 확정 전에는 구현하지 않으며, 이 절에서 정하지 않은 사항은 §1–§11을 따른다.
 
-- L1에서 항(Term)과 양화사를 도입하면 `Symbol(name, Type)`, `ForAll`, `Exists`와 매개변수를 받는 정리 선언(README §4.3)을 정의한다. 이때 `@thy.definition`의 본문을 실행하지 않고 제한된 구문으로 변환하는 방식(proposal §5.5)을 검토한다.
-- L2에서 등식을 도입할 때 항의 `==`와 `Eq()`의 관계를 다시 정해야 한다. 이 문서의 결정(`Prop`의 `==`는 구조적 동일성)은 `Prop`에만 적용된다.
-- `rewrite`, `unfold`, `induction` 등 전술과 자동화 전술은 해당 논리 단편이 도입된 뒤 이 문서에 추가한다. 자동화 전술도 이 문서의 전술과 마찬가지로 [7.1](#71-대응-규칙)의 규칙 적용만 생성해야 한다.
+### 12.1. 설계 결정 요약
+
+| 항목             | 결정                                                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 종과 상수        | `thy.sort(name)`, `thy.const(name, args, result)` 호출로 선언한다. 데코레이터가 아니며 호출 순서가 선언 순서이다. |
+| 개체 변수        | `Var(name, sort)`. 이름과 종의 쌍으로 식별한다. 이름은 표시용이며, Elaborator가 de Bruijn 인덱스로 바꾼다.        |
+| 양화사           | `ForAll(x, A)`, `Exists(x, A)`. 여러 변수는 `ForAll([x, y], A)`로 쓴다 (`ForAll(x, ForAll(y, A))`와 같다).        |
+| 스키마 술어 변수 | `Prop.symbol(name, *sorts)`. 인자 종이 없으면 기존 L0 원자이다.                                                   |
+| 명제의 `==`      | α-동치이다. 속박 변수 이름만 다른 두 명제는 같다.                                                                 |
+| 정리 매개변수    | 이 개정안에서는 도입하지 않는다. 정리 선언 함수는 계속 매개변수 없이 닫힌 명제를 반환한다.                        |
+
+README §4.2의 `Symbol(name, Real)` 표기는 비규범적 예시이다. L1은 스키마 변수인 `Prop.symbol`과의 혼동을 피하기 위해 개체 변수를 `Var`로 쓴다.
+
+### 12.2. 종과 상수
+
+```python
+from axiomweave import Prop, Theory, Var, ForAll, Exists
+
+thy = Theory("demo.fol")
+U = thy.sort("U")                       # 정규 이름 "demo.fol.U"
+a = thy.const("a", [], U)               # 개체 상수 a : U
+f = thy.const("f", [U], U)              # 함수 기호 f : U → U
+Even = thy.const("Even", [U], Prop)     # 술어 기호 Even : U → Prop
+```
+
+| API                             | 반환                        | 비고                                                         |
+| ------------------------------- | --------------------------- | ------------------------------------------------------------ |
+| `thy.sort(name)`                | `Sort`                      | 정규 이름은 `"<theory>.<name>"`                              |
+| `thy.const(name, args, result)` | `Const`, 또는 `Term`/`Prop` | `args`는 `Sort`의 목록, `result`는 `Sort` 또는 `Prop` 클래스 |
+
+- `args`가 비어 있으면 반환값은 그 상수를 나타내는 `Term`(결과가 종일 때) 또는 `Prop`(결과가 `Prop`일 때)이다. 인자가 있으면 호출 가능한 `Const`를 반환하며, `f(t)`는 `Term`, `Even(t)`는 `Prop`을 만든다.
+- 인자의 수나 종이 맞지 않거나 인자가 `Term`이 아니면 `AxwTypeError`를 일으켜야 한다.
+- 다른 Theory에 선언된 종과 상수는 그 Theory를 가져온(imports) 경우에만 사용할 수 있다. 환경에 없는 종이나 상수를 쓴 명제를 선언하면 `DeclarationError`를 일으켜야 한다.
+- 선언 이름 규칙과 중복 검사는 [5.1](#51-생성)을 따른다. 종, 상수, 공리, 정리는 같은 이름 공간을 쓴다.
+
+### 12.3. 변수, 항, 양화사
+
+```python
+x, y = Var("x", U), Var("y", U)
+
+ForAll(x, Even(x) >> Even(f(f(x))))
+Exists(x, Even(x) & ~Even(f(x)))
+```
+
+| API               | 의미                                                                |
+| ----------------- | ------------------------------------------------------------------- |
+| `Var(name, sort)` | 종이 `sort`인 개체 변수. 이름 구문은 [4.2](#42-원자와-상수)와 같다. |
+| `ForAll(v, A)`    | $\forall v{:}S.\, A$. `v`는 `Var` 또는 `Var`의 비어 있지 않은 목록  |
+| `Exists(v, A)`    | $\exists v{:}S.\, A$                                                |
+| `t.sort`          | 항의 종                                                             |
+
+- `Var` 객체는 `(name, sort)`로 식별한다. `ForAll(x, A)`는 `A` 안의 같은 이름·같은 종 변수를 모두 속박한다.
+- 한 명제 안에서 같은 이름이 서로 다른 종의 변수로 쓰이면 `AxwTypeError`를 일으켜야 한다.
+- 자유 변수를 포함한 `Prop`도 만들 수 있다. 그러나 정리와 공리의 명제는 닫혀 있어야 하며, 자유 변수가 있으면 `DeclarationError`를 일으켜야 한다.
+- `Term`에는 `bool()` 변환, 산술·비교 연산자를 정의하지 않는다 (등식은 L2).
+- `str(A)`는 `∀x:U, …`가 아니라 `∀x:U. …` 형식을 사용하며, 양화사의 범위는 가능한 한 오른쪽으로 확장된다. 표시는 `Var`의 이름을 사용하고, 충돌하면 결정적 규칙으로 이름을 바꾸어 표시한다.
+
+### 12.4. 스키마 술어 변수
+
+```python
+P = Prop.symbol("P", U)        # P : U → Prop (스키마)
+Q0 = Prop.symbol("Q")          # 기존 L0 원자
+
+ForAll(x, P(x) >> P(x))
+```
+
+- `Prop.symbol(name, *sorts)`는 `sorts`가 비어 있으면 L0와 같은 `Prop`을, 아니면 호출 가능한 `PredicateSymbol`을 반환한다.
+- 스키마 변수는 `(name, sorts)`로 식별한다. 정리나 공리의 명제 하나에서 같은 이름을 서로 다른 `sorts`로 쓰면 `DeclarationError`를 일으켜야 한다 (logic-spec §12.6의 이름 유일성).
+- 술어 기호(`thy.const(..., Prop)`)와 달리 스키마 변수는 `ctx.thm`의 치환으로 바꿀 수 있다.
+
+### 12.5. 증명 문맥의 확장
+
+**문맥.** 목표의 문맥은 개체 변수 목록과 가정 목록으로 구성된다. 목표 표시는 변수를 먼저 쓴다.
+
+```text
+goal 1/1
+  y : U
+  h : ∀x:U. P(x) ∧ Q(x)
+  ⊢ P(y)
+```
+
+**목표 전술 (추가·확장)**
+
+| 전술                        | 현재 목표                            | 결과                                                                                        |
+| --------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `ctx.intro(name=None)`      | $\forall x{:}S.\, A$                 | 목표를 $\Delta, y : S \vdash A[y/x]$로 바꾸고 변수 $y$의 `Term`을 반환                      |
+| `ctx.exists(t)`             | $\exists x{:}S.\, A$                 | `t`의 종이 $S$이면 목표를 $A[t/x]$로 바꿈                                                   |
+| `ctx.obtain(f, names=None)` | 임의의 $C$, $f : \exists x{:}S.\, A$ | 목표를 $\Delta, y : S;\ \Gamma, h : A[y/x] \vdash C$로 바꾸고 (`Term` $y$, `Fact` $h$) 반환 |
+
+- `intro`는 목표가 함의이면 기존과 같이 가정을, 전칭이면 변수를 도입한다.
+- 변수 이름을 주지 않으면 바인더의 표시 이름을 쓰고, 그 이름이 이 증명에서 이미 쓰였으면 결정적 규칙(이름 뒤에 가장 작은 양의 정수를 붙임)으로 신선한 이름을 만든다. 한 증명 안에서 도입하는 변수 이름은 모두 달라야 한다 ([6.2](#62-가정-이름)과 같은 규칙). 변수와 가정은 서로 다른 이름 공간이다.
+- `obtain`의 `names`는 `(변수 이름, 가정 이름)` 쌍이다.
+
+**전방 추론 연산 (추가)**
+
+| 연산                  | 인자                                                     | 결과                          |
+| --------------------- | -------------------------------------------------------- | ----------------------------- |
+| `ctx.spec(f, *terms)` | $f : \forall x_1 \ldots x_n.\, A$, 항 $t_1, \ldots, t_n$ | $A[t_1/x_1, \ldots, t_n/x_n]$ |
+
+- 목표 전술과 전방 추론 연산에 주는 항과 명제(`exists`, `spec`, `have`, `or_inl`, `absurd` 등의 인자)는 현재 목표의 변수 문맥에서 적격해야 한다. 문맥에 없는 변수를 쓰면 `ScopeError`, 종이 맞지 않으면 `TacticError`를 일으켜야 한다.
+- `Fact`와 `intro`/`obtain`이 반환한 변수 `Term`은 만들어진 문맥의 변수와 가정에 의존한다. [6.1](#61-개념)의 범위 규칙은 변수에도 적용된다.
+
+**스키마 치환.** `ctx.thm(decl, subst)`의 `subst`는 L0의 형식에 더해, `PredicateSymbol`을 키로 하고 `(변수 목록, 명제)` 쌍을 값으로 가질 수 있다.
+
+```python
+ctx.thm(all_and_left, {P: ([z], Even(z)), Q: ([z], Falsehood)})
+```
+
+- 변수 목록의 길이와 종은 키의 `sorts`와 같아야 하며, 그렇지 않으면 `TacticError`를 일으켜야 한다. 명제는 현재 변수 문맥과 이 변수들에서 적격해야 한다.
+
+### 12.6. Elaboration
+
+[7.1](#71-대응-규칙)에 다음을 더한다.
+
+| DSL 연산                 | 생성되는 규칙 적용                              |
+| ------------------------ | ----------------------------------------------- |
+| `intro` (전칭)           | $\forall\mathrm{I}$ (종)                        |
+| `spec` ($n$개 항)        | $\forall\mathrm{E}$를 $n$번                     |
+| `exists`                 | $\exists\mathrm{I}$ (술어, 증인)                |
+| `obtain`                 | $\exists\mathrm{E}$ (가정 이름)                 |
+| `thm` (술어 스키마 치환) | $\mathrm{Thm}$/$\mathrm{Ax}$ (`params` 객체 값) |
+
+- Elaborator는 이름 기반 `Prop`을 kernel-spec §13의 de Bruijn 인코딩으로 변환한다. 같은 `Prop`은 항상 같은 인코딩으로 변환되어야 한다.
+- 번들의 `fragment`는 환경에 L1 구성 요소(종, 상수, 양화사, 인자 있는 스키마 변수)가 하나라도 있으면 `"L1"`, 아니면 `"L0"`이다. 따라서 L0만 쓰는 Theory의 인증서와 해시는 바뀌지 않는다.
+- 종과 상수 선언은 `CheckReport.results`에 포함하지 않는다. 결과는 정리만 보고한다 ([5.6](#56-검증)).
+
+### 12.7. 예제
+
+예제는 비규범적이다.
+
+```python
+from axiomweave import Exists, ForAll, Prop, Theory, Var
+
+thy = Theory("demo.fol")
+U = thy.sort("U")
+a = thy.const("a", [], U)
+Even = thy.const("Even", [U], Prop)
+P, Q = Prop.symbol("P", U), Prop.symbol("Q", U)
+x = Var("x", U)
+
+
+@thy.theorem
+def all_and_left() -> Prop:
+    return ForAll(x, P(x) & Q(x)) >> ForAll(x, P(x))
+
+
+@thy.proof(all_and_left)
+def _(ctx):
+    h = ctx.intro()
+    y = ctx.intro()                       # y : U
+    ctx.exact(ctx.and_left(ctx.spec(h, y)))
+
+
+@thy.theorem
+def even_witness() -> Prop:
+    return Even(a) >> Exists(x, Even(x))
+
+
+@thy.proof(even_witness)
+def _(ctx):
+    h = ctx.intro()
+    ctx.exists(a)                         # 목표: Even(a)
+    ctx.exact(h)
+
+
+@thy.theorem
+def ex_not_all_not() -> Prop:
+    return Exists(x, P(x)) >> ~ForAll(x, ~P(x))
+
+
+@thy.proof(ex_not_all_not)
+def _(ctx):
+    h1 = ctx.intro()
+    h2 = ctx.intro()
+    y, hy = ctx.obtain(h1)                # y : U, hy : P(y)
+    ctx.exact(ctx.mp(ctx.spec(h2, y), hy))
+```
+
+| 오류 예                                                                   | 결과                                |
+| ------------------------------------------------------------------------- | ----------------------------------- |
+| `@thy.theorem`이 `Even(x)`를 반환 (자유 변수)                             | `DeclarationError`                  |
+| `Even(Prop.symbol("R"))`                                                  | `AxwTypeError` (`Term`이 아닌 인자) |
+| `split` 뒤 첫 번째 목표에서 `obtain`한 `y`나 `hy`를 두 번째 목표에서 사용 | `ScopeError`                        |
+| 목표가 $\exists x{:}U.\, A$일 때 종이 다른 항으로 `ctx.exists(t)`         | `TacticError`                       |
+
+## 13. 확장 시 유의 사항
+
+이 절은 L2 이후 개정을 위한 비규범적 메모이다.
+
+- 매개변수를 받는 정리 선언(README §4.3)은 L1 개정안에 포함하지 않았다. 도입한다면 `def t(x: U)`의 매개변수를 전칭 양화로 해석하고, 정리의 적용 `t(a)`를 `ctx.spec`으로 Elaboration하는 방식을 검토한다. `@thy.definition`의 본문을 실행하지 않고 제한된 구문으로 변환하는 방식(proposal §5.5)도 함께 검토한다.
+- L2에서 등식을 도입할 때 항의 `==`와 `Eq()`의 관계를 다시 정해야 한다. 이 문서의 결정(`Prop`의 `==`는 구조적 동일성 또는 α-동치)은 `Prop`에만 적용되며, `Term`의 `==`도 같은 원칙을 따르는 것을 권장한다.
+- `rewrite`, `unfold`, `induction` 등 전술과 자동화 전술은 해당 논리 단편이 도입된 뒤 이 문서에 추가한다. 자동화 전술도 이 문서의 전술과 마찬가지로 [7.1](#71-대응-규칙)과 [12.6](#126-elaboration)의 규칙 적용만 생성해야 한다.
 - 정적 린트 도구는 [4.5](#45-연산자-우선순위와-괄호-규칙)의 괄호 규칙 위반을 Python AST에서 검출할 수 있다.
