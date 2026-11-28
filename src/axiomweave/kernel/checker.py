@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from axiomweave.kernel.certificate import (
     DEFAULT_LIMITS,
-    L1,
+    FIRST_ORDER,
     PROP_RESULT,
     Declaration,
     Limits,
@@ -120,7 +120,7 @@ def _check_declaration(
             return DeclarationResult(d.name, d.kind, ACCEPTED, None, None)
 
         assert d.statement is not None
-        typed = fragment == L1
+        typed = fragment in FIRST_ORDER
         signature = check_statement(env, table, d.statement, f"{d.path}.statement") if typed else {}
         if d.kind == "axiom":
             env[d.name] = Accepted("axiom", d.computed_hash, d.statement, signature=signature)

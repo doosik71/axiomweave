@@ -2,7 +2,8 @@
 
 Implements kernel-spec §3 (names), §4 (propositions), §5 (derivation trees),
 §6 (bundle structure), §7 (canonical JSON and SHA-256 hashes) and, for
-fragment L1, §13.2–13.6 (terms, quantifiers, declarations, de Bruijn operations).
+fragment L1, §13.2–13.6 (terms, quantifiers, declarations, de Bruijn operations)
+and, for fragment L2, §14 (equality).
 """
 
 import hashlib
@@ -23,15 +24,18 @@ from axiomweave.kernel.errors import (
 
 FORMAT = "axwp"
 FORMAT_VERSION = 1
-L0, L1 = "L0", "L1"
-FRAGMENTS = frozenset({L0, L1})
+L0, L1, L2 = "L0", "L1", "L2"
+FRAGMENTS = frozenset({L0, L1, L2})
+FIRST_ORDER = frozenset({L1, L2})  # fragments with terms, sorts and quantifiers
 
 RESERVED_WORDS = frozenset({"and", "or", "imp", "false"})
 PROP_RESULT = "prop"  # `result` of a const declaration whose type ends in Prop
 
-# Tags outside each fragment that are reported as E_FRAGMENT (kernel-spec §4, §13.3).
-_OUTSIDE_L1_TAGS = frozenset({"lam", "eq"})
+# Tags outside each fragment that are reported as E_FRAGMENT (kernel-spec §4, §13.3, §14.2).
+_OUTSIDE_L2_TAGS = frozenset({"lam"})
+_OUTSIDE_L1_TAGS = _OUTSIDE_L2_TAGS | {"eq"}
 _OUTSIDE_L0_TAGS = _OUTSIDE_L1_TAGS | {"pvar", "pred", "forall", "exists", "var", "app"}
+_OUTSIDE_TAGS = {L0: _OUTSIDE_L0_TAGS, L1: _OUTSIDE_L1_TAGS, L2: _OUTSIDE_L2_TAGS}
 
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _HASH = re.compile(r"sha256:[0-9a-f]{64}")
@@ -239,7 +243,8 @@ class PropTable:
     Nodes are ("atom", name), ("false",), (tag, left_id, right_id) for tag in
     {"and", "or", "imp"}, and in fragment L1 additionally ("pvar", name, args),
     ("pred", const, args), ("forall", sort, body), ("exists", sort, body),
-    ("var", index) and ("app", const, args), where args is a tuple of term ids.
+    ("var", index) and ("app", const, args), where args is a tuple of term ids;
+    in fragment L2 also ("eq", left_term, right_term).
     Bound variables are de Bruijn indices (0 = innermost binder).
     """
 
@@ -295,7 +300,7 @@ class PropTable:
             result = node[1] + 1
         elif tag in ("app", "pred", "pvar"):
             result = max((self.loose(a) for a in node[2]), default=0)
-        elif tag in ("and", "or", "imp"):
+        elif tag in ("and", "or", "imp", "eq"):
             result = max(self.loose(node[1]), self.loose(node[2]))
         elif tag in ("forall", "exists"):
             result = max(self.loose(node[2]) - 1, 0)
@@ -326,7 +331,7 @@ class PropTable:
                 result = self.make((tag, node[1], tuple(go(a, depth) for a in node[2])))
             elif tag in ("forall", "exists"):
                 result = self.make((tag, node[1], go(node[2], depth + 1)))
-            else:  # and, or, imp
+            else:  # and, or, imp, eq
                 result = self.make((tag, go(node[1], depth), go(node[2], depth)))
             memo[key] = result
             return result
@@ -401,6 +406,8 @@ class PropTable:
             return f"#{node[1]}"
         if tag in ("app", "pred", "pvar"):
             return f"{node[1]}({', '.join(self.show(a) for a in node[2])})"
+        if tag == "eq":
+            return f"({self.show(node[1])} = {self.show(node[2])})"
         if tag in ("forall", "exists"):
             quantifier = "∀" if tag == "forall" else "∃"
             return f"({quantifier}:{node[1]}. {self.show(node[2])})"
@@ -439,7 +446,10 @@ def decode_prop(value: object, table: PropTable, path: str, fragment: str = L0) 
         left = decode_prop(value[1], table, f"{path}[1]", fragment)
         right = decode_prop(value[2], table, f"{path}[2]", fragment)
         return table.make((tag, left, right))
-    if fragment == L1:
+    if fragment == L2 and tag == "eq" and len(value) == 3:
+        left = decode_term(value[1], table, f"{path}[1]")
+        return table.make(("eq", left, decode_term(value[2], table, f"{path}[2]")))
+    if fragment in FIRST_ORDER:
         if tag == "pvar" and len(value) == 3:
             name = check_local_name(value[1], f"{path}[1]")
             args = _decode_args(value[2], table, f"{path}[2]")
@@ -452,8 +462,7 @@ def decode_prop(value: object, table: PropTable, path: str, fragment: str = L0) 
         if tag in ("forall", "exists") and len(value) == 3:
             sort = check_decl_name(value[1], f"{path}[1]")
             return table.make((tag, sort, decode_prop(value[2], table, f"{path}[2]", fragment)))
-    outside = _OUTSIDE_L1_TAGS if fragment == L1 else _OUTSIDE_L0_TAGS
-    if tag in outside:
+    if tag in _OUTSIDE_TAGS[fragment]:
         _fail(E_FRAGMENT, path, f"'{tag}' is outside fragment {fragment}")
     _fail(E_FORMAT, path, f"malformed proposition with tag {tag!r} and {len(value)} elements")
 
@@ -486,6 +495,10 @@ _L1_RULE_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
     "ex_i": (("prop", "P"), ("witness", "T"), ("of", "D")),
     "ex_e": (("of", "D"), ("name", "H"), ("body", "D")),
 }
+_L2_RULE_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
+    "eq_refl": (("term", "T"),),
+    "eq_e": (("eq", "D"), ("motive", "P"), ("of", "D")),
+}
 
 
 def decode_derivation(value: object, table: PropTable, path: str, fragment: str = L0) -> Node:
@@ -494,9 +507,13 @@ def decode_derivation(value: object, table: PropTable, path: str, fragment: str 
     rule = value["rule"]
     fields_spec = _RULE_FIELDS.get(rule)
     if fields_spec is None and rule in _L1_RULE_FIELDS:
-        if fragment != L1:
+        if fragment not in FIRST_ORDER:
             _fail(E_FRAGMENT, path, f"rule {rule!r} is outside fragment {fragment}")
         fields_spec = _L1_RULE_FIELDS[rule]
+    if fields_spec is None and rule in _L2_RULE_FIELDS:
+        if fragment != L2:
+            _fail(E_FRAGMENT, path, f"rule {rule!r} is outside fragment {fragment}")
+        fields_spec = _L2_RULE_FIELDS[rule]
     if fields_spec is None:
         _fail(E_FORMAT, path, f"unknown rule {rule!r}")
     check_keys(value, {"rule", *(key for key, _ in fields_spec)}, path)
@@ -535,7 +552,7 @@ def decode_subst(
         item = value[key]
         sub = f"{path}.{key}"
         if isinstance(item, dict):
-            if fragment != L1:
+            if fragment not in FIRST_ORDER:
                 _fail(E_FRAGMENT, sub, f"predicate substitution is outside fragment {fragment}")
             check_keys(item, {"params", "body"}, sub)
             params = item["params"]
@@ -618,7 +635,7 @@ def decode_declaration(
     kind = value.get("kind")
     if not isinstance(kind, str) or kind not in _DECL_KEYS:
         _fail(E_FORMAT, f"{path}.kind", f"unknown declaration kind {kind!r}")
-    if kind in _L1_KINDS and fragment != L1:
+    if kind in _L1_KINDS and fragment not in FIRST_ORDER:
         _fail(E_FRAGMENT, f"{path}.kind", f"'{kind}' declarations are outside fragment {fragment}")
     check_keys(value, _DECL_KEYS[kind], path)
 

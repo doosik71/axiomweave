@@ -190,3 +190,22 @@ def const(name: str, args: list[str], result: str) -> JSON:
 
 def encode(obj: JSON) -> bytes:
     return json.dumps(obj, indent=2).encode("utf-8")
+
+
+# --- fragment L2 (kernel-spec §14) --------------------------------------------
+
+
+def l2_bundle(*decls: JSON, theory: str = "demo.eq") -> JSON:
+    return bundle(*decls, theory=theory, fragment="L2")
+
+
+def eq(left: JSON, right: JSON) -> JSON:
+    return ["eq", left, right]
+
+
+def eq_refl(term: JSON) -> JSON:
+    return {"rule": "eq_refl", "term": term}
+
+
+def eq_e(eq_proof: JSON, motive: JSON, of: JSON) -> JSON:
+    return {"rule": "eq_e", "eq": eq_proof, "motive": motive, "of": of}

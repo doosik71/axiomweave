@@ -1,4 +1,4 @@
-"""Type checking and conclusion recomputation (kernel-spec §8.4, §13.7–13.8; logic-spec §8, §12).
+"""Type checking and conclusion recomputation (kernel-spec §8.4, §13.7–13.8, §14; logic-spec §8, §12–13).
 
 Individual variables are de Bruijn indices. `delta` is the tuple of sorts of
 the variables in scope; index i refers to delta[-1 - i]. A hypothesis records
@@ -136,6 +136,11 @@ def check_prop(
         elif tag in ("forall", "exists"):
             _sort_decl(env, node[1], path)
             go(node[2], (*d, node[1]))
+        elif tag == "eq":
+            left = sort_of(env, table, node[1], d, path)
+            right = sort_of(env, table, node[2], d, path)
+            if left != right:
+                _fail(E_TYPE, path, f"equality between sorts {left!r} and {right!r}")
         elif tag != "false":
             _fail(E_TYPE, path, f"expected a proposition, got {table.show(p)}")
 
@@ -296,6 +301,27 @@ class Checker:
             inner = (*delta, sort)
             conclusion, ax1 = self.infer(inner, {**gamma, name: (prop, len(inner))}, body)
             return table.lower(conclusion, f"{path}.body"), ax0 | ax1
+
+        if rule == "eq_refl":
+            term = node[2]
+            sort_of(self.env, table, term, delta, f"{path}.term")
+            return table.make(("eq", term, term)), frozenset()
+
+        if rule == "eq_e":
+            _, _, eq, motive, of = node
+            premise, ax1 = self.infer(delta, gamma, eq)
+            left, right = _expect(table, premise, "eq", path, rule)
+            sort = sort_of(self.env, table, left, delta, f"{path}.eq")
+            self._wf(motive, (*delta, sort), f"{path}.motive")
+            instance, ax2 = self.infer(delta, gamma, of)
+            expected = table.instantiate(motive, (left,))
+            if instance != expected:
+                _fail(
+                    E_RULE_MISMATCH,
+                    path,
+                    f"eq_e premise is {table.show(instance)}, expected {table.show(expected)}",
+                )
+            return table.instantiate(motive, (right,)), ax1 | ax2
 
         if rule in ("thm", "ax"):
             return self._instance(delta, node)

@@ -1,6 +1,6 @@
 # AxiomWeave 언어 명세 (Language Specification)
 
-> **문서 상태:** 초안(Draft) · 단편 L0, L1 · 대상 버전 v0.1 (L1: [§12](#12-단편-l1-dsl)) · L2 개정안([§13](#13-단편-l2-dsl-개정안)) 검토 대기  
+> **문서 상태:** 초안(Draft) · 단편 L0, L1 · 대상 버전 v0.1 (L1: [§12](#12-단편-l1-dsl)) · L2 DSL 개정안([§13](#13-단편-l2-dsl-개정안)) 구현 전  
 > 상위 문서: [specification.md](specification.md), 논리 규칙: [logic-spec.md](logic-spec.md). 이 문서는 v0.1 Python 임베디드 DSL의 표면 문법, 선언과 증명 작성 방식, 커널 입력으로의 변환(Elaboration)을 정의한다. 규범적 표현은 [specification.md §1.1](specification.md#11-규범적-표현)을 따른다.
 
 ## 1. 범위
@@ -771,7 +771,7 @@ def _(ctx):
 
 ## 13. 단편 L2 DSL (개정안)
 
-> **상태:** 개정안(Proposed) · 검토 대기. 이 절은 [logic-spec.md §13](logic-spec.md#13-단편-l2-등식-개정안)의 등식을 Python DSL로 표현하는 방법을 정의한다. 확정 전에는 구현하지 않으며, 이 절에서 정하지 않은 사항은 §12를 따른다.
+> **상태:** 개정안(Proposed) · 구현 전. 논리([logic-spec.md §13](logic-spec.md#13-단편-l2-등식))와 커널([kernel-spec.md §14](kernel-spec.md#14-단편-l2-인코딩과-검사))은 확정·구현되었다. 이 절은 등식을 Python DSL로 표현하는 방법을 정의하며, 구현 시 검토를 거쳐 확정한다. 이 절에서 정하지 않은 사항은 §12를 따른다.
 
 ### 13.1. 설계 결정 요약
 
