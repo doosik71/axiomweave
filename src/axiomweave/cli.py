@@ -2,7 +2,8 @@
 
 `axw check FILE.py` runs the user's proof code; `axw verify FILE.axwp` runs only
 the kernel on a certificate and never imports user code; `axw export-lean`
-translates a kernel-accepted certificate to Lean 4 for cross-checking.
+translates a kernel-accepted certificate to Lean 4 for cross-checking;
+`axw search FILE.py WORD...` lists matching declarations (ai-spec §4.5).
 """
 
 import argparse
@@ -26,6 +27,11 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("file", type=Path)
     verify = commands.add_parser("verify", help="verify a certificate bundle with the kernel")
     verify.add_argument("file", type=Path)
+    search = commands.add_parser(
+        "search", help="list theorems and axioms whose name or statement contains all words"
+    )
+    search.add_argument("file", type=Path)
+    search.add_argument("words", nargs="+")
     export = commands.add_parser(
         "export-lean", help="translate a kernel-accepted certificate to a Lean 4 file"
     )
@@ -44,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "check":
         return _check(args.file)
+    if args.command == "search":
+        return _search(args.file, args.words)
     policy = _policy(args.allow)
     if policy is None:
         return 2
@@ -78,6 +86,27 @@ def _check(path: Path) -> int:
         print(report)
         ok = ok and report.ok
     return 0 if ok else 1
+
+
+def _search(path: Path, words: list[str]) -> int:
+    """Text search over declarations (ai-spec §4.5); proofs are not run."""
+    from axiomweave.language.theory import Axiom, Theorem, Theory
+
+    module = _load_module(path)
+    seen: set[str] = set()
+    found = 0
+    needles = [w.lower() for w in words]
+    for theory in (v for v in vars(module).values() if isinstance(v, Theory)):
+        for decl in theory.environment():
+            if decl.name in seen or not isinstance(decl, Axiom | Theorem):
+                continue
+            seen.add(decl.name)
+            text = f"{decl.name} {decl.statement}"
+            if all(w in text.lower() for w in needles):
+                kind = "axiom" if isinstance(decl, Axiom) else "theorem"
+                print(f"{kind:<8} {decl.name} : {decl.statement}")
+                found += 1
+    return 0 if found else 1
 
 
 def _imports_closure(theory: object) -> list[object]:

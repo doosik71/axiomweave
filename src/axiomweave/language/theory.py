@@ -416,7 +416,15 @@ class Theory:
             kind = "axiom" if isinstance(target, Axiom) else "theorem"
             return DeclRef(kind, target.name, hashes[target.name], target.statement)
 
-        ctx = ProofContext(theorem.statement, resolve)
+        def candidates() -> list[tuple[object, frozenset[str]]]:
+            before = declarations[: position[id(theorem)]]
+            return [
+                (d, frozenset({d.name}) if isinstance(d, Axiom) else claimed_axioms[d.name])
+                for d in before
+                if isinstance(d, Axiom | Theorem) and d.name in hashes
+            ]
+
+        ctx = ProofContext(theorem.statement, resolve, candidates)
         try:
             theorem._proof(ctx)
         except Exception as exc:  # noqa: BLE001 - any failure of the proof script rejects it

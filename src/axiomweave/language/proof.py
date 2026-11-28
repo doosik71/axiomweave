@@ -42,6 +42,8 @@ class DeclRef:
 
 
 Resolver = Callable[[object], DeclRef]
+# Declarations a proof may refer to, in environment order, with their axioms.
+Candidates = Callable[[], Sequence[tuple[object, frozenset[str]]]]
 
 
 @dataclass(frozen=True)
@@ -149,10 +151,13 @@ def _hyp(name: str) -> dict[str, Any]:
 class ProofContext:
     """The `ctx` argument of a proof function."""
 
-    def __init__(self, statement: Prop, resolve: Resolver) -> None:
+    def __init__(
+        self, statement: Prop, resolve: Resolver, candidates: Candidates | None = None
+    ) -> None:
         self._root = _Goal((), statement)
         self._stack: list[list[_Goal]] = [[self._root]]
         self._resolve = resolve
+        self._candidates = candidates
         self._used_names: set[str] = set()
         self._used_vars: set[str] = set()
         # variable name -> (sort name, scope where it was introduced)
@@ -699,6 +704,21 @@ class ProofContext:
             self._in_scope(fact, goal)
             facts.setdefault(fact.prop, fact)
         auto(self, facts, limit)
+
+    # --- theorem search (ai-spec §4.4) -------------------------------------------------
+
+    def search(self, limit: int | None = None) -> tuple[Any, ...]:
+        """Theorems and axioms of the environment whose conclusion fits the current goal,
+        best first. The proof state is not changed."""
+        from axiomweave.ai.search import DEFAULT_LIMIT, search
+
+        if limit is None:
+            limit = DEFAULT_LIMIT
+        if type(limit) is not int or limit <= 0:
+            raise AxwTypeError(f"search: limit must be a positive int, got {limit!r}")
+        self._current()
+        candidates = self._candidates() if self._candidates is not None else ()
+        return search(self, candidates, limit)
 
     # --- semiring identities (interop-spec §5.3) ----------------------------------------
 

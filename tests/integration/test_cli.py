@@ -160,3 +160,12 @@ def test_export_lean_check_without_lean(tmp_path: Path) -> None:
     assert result.returncode == 3, result.stdout + result.stderr
     assert "lean      skipped" in result.stdout
     assert output.exists()
+
+
+def test_search_lists_matching_declarations() -> None:
+    result = axw("search", str(EXAMPLE), "imp", "trans")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.startswith("theorem  examples.implication.imp_trans : ")
+    peano = axw("search", str(PEANO), "MUL", "comm")
+    assert "arith.mul_comm" in peano.stdout and "arith.mul_right_comm" in peano.stdout
+    assert axw("search", str(EXAMPLE), "nothing_matches_this").returncode == 1
