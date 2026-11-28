@@ -679,6 +679,27 @@ class ProofContext:
         )
         self.apply(schema)
 
+    # --- propositional automation (ai-spec §3.2) -----------------------------------------
+
+    def auto(self, using: Sequence[Fact] = (), limit: int | None = None) -> None:
+        """Close the current goal by intuitionistic propositional reasoning from the
+        context hypotheses and `using`; other formulas are treated as atoms."""
+        from axiomweave.ai.propositional import DEFAULT_LIMIT, auto
+
+        if limit is None:
+            limit = DEFAULT_LIMIT
+        if type(limit) is not int or limit <= 0:
+            raise AxwTypeError(f"auto: limit must be a positive int, got {limit!r}")
+        goal = self._current()
+        facts: dict[Prop, Fact] = {}
+        for name, prop in goal.context:
+            facts.setdefault(prop, Fact(prop, _hyp(name), goal.names))
+        for item in using:
+            fact = self._fact(item)
+            self._in_scope(fact, goal)
+            facts.setdefault(fact.prop, fact)
+        auto(self, facts, limit)
+
     # --- semiring identities (interop-spec §5.3) ----------------------------------------
 
     def ring(self) -> None:
